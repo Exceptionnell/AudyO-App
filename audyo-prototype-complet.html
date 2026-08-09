@@ -1,0 +1,1359 @@
+<meta charset="UTF-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+:root{
+  --bg:#211A24; --ink:#F3ECE6; --ink-soft:#B8A9B0; --panel:#2B222F; --panel-raised:#362B3B; --line:rgba(243,236,230,0.10);
+  --teal:#FF8A5B; --amber:#FFB562; --spk-a:#F3ECE6; --spk-a-bg:rgba(243,236,230,0.07); --spk-b:#8FC3B5; --spk-b-bg:rgba(143,195,181,0.14);
+  --purple:#E85D8A; --purple-bg:rgba(232,93,138,0.14); --amber-bg:rgba(255,181,98,0.14); --danger:#FF6B6B;
+  --grad: linear-gradient(135deg, #FF8A5B 0%, #FFB562 48%, #E85D8A 100%);
+  --grad-ink:#2B1710;
+}
+*{box-sizing:border-box;}
+.audyo-root{ display:flex; justify-content:center; font-family:'Plus Jakarta Sans',sans-serif; color:var(--ink); padding:12px 0; }
+.phone{ width:380px; max-width:100%; background:var(--bg); border-radius:34px; border:1px solid rgba(255,255,255,0.07);
+  box-shadow:0 30px 70px -25px rgba(0,0,0,.65); overflow:hidden; position:relative; }
+.notch{ position:absolute; top:0; left:50%; transform:translateX(-50%); width:120px; height:22px; background:#0C090D;
+  border-radius:0 0 14px 14px; z-index:6; }
+.app{ display:flex; flex-direction:column; height:720px; }
+.screen{ display:none; flex:1; min-height:0; flex-direction:column; }
+.screen.active{ display:flex; }
+
+.topbar{ padding:34px 18px 12px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
+.brand{ font-family:'Instrument Serif', serif; font-style:italic; font-weight:400; font-size:21px; }
+.brand span{ background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.mlabel{ font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); font-weight:600; margin-top:1px; }
+.back{ background:none; border:none; color:var(--teal); font-weight:700; font-size:13px; cursor:pointer; padding:4px 0; font-family:'Plus Jakarta Sans',sans-serif; }
+
+/* ---- Accueil ---- */
+.home-header{ padding:30px 20px 6px; }
+.home-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:14px 16px; flex:1; align-content:start; }
+.home-card{ border:1px solid var(--line); background:var(--panel); text-align:left; border-radius:20px; padding:16px; cursor:pointer; aspect-ratio:1; display:flex; flex-direction:column; justify-content:flex-end; transition:transform .12s ease, opacity .12s ease; font-family:'Plus Jakarta Sans',sans-serif; }
+.home-card:active{ transform:scale(.97); opacity:.9; }
+.home-card .ic{ font-size:26px; margin-bottom:8px; }
+.home-card .t{ font-size:14.5px; font-weight:700; }
+.home-card .d{ font-size:11px; color:var(--ink-soft); line-height:1.4; margin-top:2px; }
+
+.tabbar{ display:flex; justify-content:space-around; padding:10px 4px 18px; border-top:1px solid var(--line); background:var(--bg); }
+.tab{ background:none; border:none; font-size:10.5px; color:var(--ink-soft); font-weight:600; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; font-family:'Plus Jakarta Sans',sans-serif; }
+.tab .dot{ width:5px; height:5px; border-radius:50%; background:transparent; }
+.tab.active{ color:var(--teal); }
+.tab.active .dot{ background:var(--teal); }
+
+/* ---- Conversation (fonctionnel) ---- */
+.mic-zone{ display:flex; flex-direction:column; align-items:center; padding:20px 0 12px; gap:9px; position:relative; }
+.mic-zone::before{ content:''; position:absolute; top:6px; width:130px; height:130px; border-radius:50%;
+  background:radial-gradient(circle, rgba(255,138,91,0.30) 0%, rgba(232,93,138,0.10) 45%, transparent 72%); filter:blur(1px); pointer-events:none; }
+.mic-wrap{ position:relative; width:88px; height:88px; display:flex; align-items:center; justify-content:center; }
+.ring{ position:absolute; inset:0; border-radius:50%; border:1.5px solid rgba(255,181,98,.45); opacity:0; transition:opacity .2s ease; pointer-events:none; }
+.ring.on{ opacity:1; }
+.mic-btn{ position:relative; z-index:2; width:60px; height:60px; border-radius:50%; border:none; background:var(--panel-raised); color:var(--ink); font-size:20px; cursor:pointer; transition:background .2s ease, box-shadow .2s ease; }
+.mic-btn.listening{ background:var(--grad); color:var(--grad-ink); box-shadow:0 8px 26px -6px rgba(255,138,91,.6); }
+.mic-btn-sm{ width:52px; height:52px; font-size:18px; }
+.hint{ font-size:11.5px; color:var(--ink-soft); text-align:center; padding:0 30px; }
+.speaker-row{ display:flex; justify-content:center; gap:8px; padding:0 20px 8px; }
+.spk{ border:1px solid var(--line); background:var(--panel); border-radius:20px; padding:5px 13px; font-size:12px; font-weight:600; color:var(--ink-soft); cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; }
+.spk.active[data-spk="0"]{ background:var(--spk-a-bg); color:var(--spk-a); border-color:transparent; }
+.spk.active[data-spk="1"]{ background:var(--spk-b-bg); color:var(--spk-b); border-color:transparent; }
+.diarization-note{ text-align:center; font-size:10px; color:var(--ink-soft); opacity:.75; padding:0 24px 8px; line-height:1.4; }
+.transcript{ flex:1; overflow-y:auto; padding:4px 16px 8px; display:flex; flex-direction:column; gap:8px; }
+.bubble{ max-width:82%; padding:8px 11px; border-radius:14px; font-size:13px; line-height:1.4; }
+.bubble .meta{ font-size:9.5px; font-weight:700; opacity:.6; display:block; margin-bottom:2px; }
+.bubble.spk0{ align-self:flex-start; background:var(--spk-a-bg); color:var(--spk-a); border-bottom-left-radius:4px; }
+.bubble.spk1{ align-self:flex-end; background:var(--spk-b-bg); color:var(--spk-b); border-bottom-right-radius:4px; }
+.bubble.interim{ opacity:.55; font-style:italic; }
+.empty-state{ margin:auto; text-align:center; color:var(--ink-soft); font-size:12px; padding:0 40px; line-height:1.5; }
+.empty-state b{ color:var(--ink); }
+.bottombar{ padding:10px 16px 16px; border-top:1px solid var(--line); display:flex; gap:8px; }
+.btn-secondary, .btn-primary{ flex:1; border:none; border-radius:14px; padding:10px 0; font-weight:700; font-size:12.5px; cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; }
+.btn-secondary{ background:var(--panel-raised); color:var(--ink-soft); }
+.btn-primary{ background:var(--grad); color:var(--grad-ink); }
+.btn-primary:disabled{ opacity:.4; }
+.summary-panel{ position:absolute; inset:0; background:var(--bg); z-index:10; display:flex; flex-direction:column; transform:translateY(100%); transition:transform .28s ease; }
+.summary-panel.open{ transform:translateY(0); }
+.summary-header{ padding:34px 18px 12px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; }
+.summary-header h3{ font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:15px; margin:0; }
+.summary-header button{ border:none; background:var(--panel-raised); color:var(--ink); width:26px; height:26px; border-radius:50%; cursor:pointer; }
+.summary-body{ flex:1; overflow-y:auto; padding:16px 18px; font-size:13px; line-height:1.5; }
+.summary-body p{ margin:0 0 10px; }
+.summary-body .loading{ color:var(--ink-soft); font-style:italic; }
+.summary-body .err{ color:var(--danger); }
+
+/* ---- Ecoute assistee ---- */
+.eq{ display:flex; align-items:flex-end; justify-content:center; gap:9px; height:70px; padding:14px 0 8px; }
+.eq .bar{ width:11px; background:var(--grad); border-radius:5px; transition:height .08s ease; }
+.ampli-warning{ font-size:10px; color:var(--amber); text-align:center; padding:0 24px 8px; line-height:1.4; opacity:.9; }
+.ampli-controls{ padding:4px 18px 8px; display:flex; flex-direction:column; gap:14px; }
+.slider-row{ display:flex; flex-direction:column; gap:4px; }
+.slider-label{ display:flex; justify-content:space-between; font-size:11.5px; font-weight:600; color:var(--ink); }
+.slider-val{ color:var(--coral); font-weight:700; }
+.audyo-slider{ -webkit-appearance:none; appearance:none; width:100%; height:5px; border-radius:4px; background:var(--panel-raised); outline:none; }
+.audyo-slider::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:18px; height:18px; border-radius:50%; background:var(--grad); cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.4); }
+.audyo-slider::-moz-range-thumb{ width:18px; height:18px; border:none; border-radius:50%; background:var(--coral); cursor:pointer; }
+.rowline{ display:flex; justify-content:space-between; align-items:center; padding:12px 18px; font-size:12.5px; color:var(--ink-soft); border-bottom:1px solid var(--line); }
+.pill-sm{ background:var(--spk-b-bg); color:var(--spk-b); font-size:10.5px; font-weight:700; padding:4px 10px; border-radius:20px; }
+.wip{ text-align:center; font-size:11px; color:var(--ink-soft); opacity:.75; padding:14px 30px; line-height:1.5; }
+
+/* ---- Traduction ---- */
+.lang-picker{ display:flex; align-items:center; gap:8px; padding:14px 16px 6px; }
+.lang-select{
+  flex:1; appearance:none; -webkit-appearance:none; border:1px solid var(--line); background:var(--panel);
+  border-radius:12px; padding:9px 10px; font-family:'Plus Jakarta Sans',sans-serif; font-size:12.5px; font-weight:600;
+  color:var(--ink); cursor:pointer;
+}
+.swap-btn{ border:none; background:var(--amber-bg); color:var(--amber); width:32px; height:32px; border-radius:50%; font-size:14px; cursor:pointer; flex-shrink:0; }
+.swap-btn:active{ transform:scale(0.9); }
+.trans-list{ flex:1; overflow-y:auto; padding:4px 16px 10px; display:flex; flex-direction:column; gap:10px; }
+.trow{ border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+.trow .src{ padding:9px 12px; font-size:13px; color:var(--ink); background:var(--panel); }
+.trow .tgt{ padding:9px 12px; font-size:13px; color:var(--spk-b); background:var(--spk-b-bg); display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.trow .tgt .txt{ flex:1; }
+.trow .tgt.loading{ color:var(--ink-soft); font-style:italic; }
+.speak-btn{ border:none; background:none; color:var(--spk-b); font-size:15px; cursor:pointer; flex-shrink:0; padding:2px 4px; }
+.trow .tag{ font-size:9px; font-weight:700; text-transform:uppercase; color:var(--ink-soft); opacity:.7; }
+
+/* ---- Reunion ---- */
+.section-label{ padding:8px 16px 2px; font-size:11px; color:var(--ink-soft); font-weight:700; }
+.reunion-setup, .reunion-live{ flex:1; display:flex; flex-direction:column; min-height:0; }
+.participant-list{ padding:6px 16px; display:flex; flex-direction:column; gap:8px; overflow-y:auto; }
+.participant-row{ display:flex; align-items:center; gap:10px; padding:9px 10px; border:1px solid var(--line); border-radius:14px; background:var(--panel); }
+.p-avatar{ width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#2B1710; flex-shrink:0; }
+.p-name{ flex:1; font-size:12.5px; font-weight:600; }
+.p-sample-btn{ border:1px solid var(--line); background:var(--panel-raised); color:var(--ink-soft); font-size:10px; font-weight:700; padding:5px 9px; border-radius:20px; cursor:pointer; white-space:nowrap; }
+.p-sample-btn.recording{ background:var(--danger); color:#fff; border-color:transparent; }
+.p-sample-btn.done{ background:var(--spk-b-bg); color:var(--spk-b); border-color:transparent; }
+.p-remove{ border:none; background:none; color:var(--ink-soft); opacity:.6; font-size:15px; cursor:pointer; padding:0 2px; flex-shrink:0; }
+.add-participant-row{ display:flex; gap:8px; padding:10px 16px; }
+.participant-input{ flex:1; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:12px; padding:9px 12px; font-family:'Plus Jakarta Sans',sans-serif; font-size:12.5px; }
+.participant-input::placeholder{ color:var(--ink-soft); }
+.add-btn{ border:none; background:var(--grad); color:var(--grad-ink); font-weight:700; font-size:12px; padding:0 16px; border-radius:12px; cursor:pointer; }
+.voice-note{ font-size:10.5px; color:var(--ink-soft); opacity:.85; line-height:1.5; padding:4px 16px 8px; }
+.voice-note b{ color:var(--ink); opacity:1; }
+
+.participant-chip-row{ display:flex; gap:8px; padding:0 16px 8px; flex-wrap:wrap; }
+.p-chip{ border:1.5px solid var(--line); background:var(--panel); border-radius:20px; padding:5px 12px 5px 6px; display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; }
+.p-chip .dot{ width:16px; height:16px; border-radius:50%; }
+.p-chip.active{ border-color:transparent; color:var(--ink); }
+
+/* ---- Mode switch (Conversation / Écoute assistée) ---- */
+.mode-switch{ display:flex; gap:6px; padding:10px 16px 0; }
+.mode-btn{ flex:1; border:1px solid var(--line); background:var(--panel); color:var(--ink-soft); font-size:11.5px; font-weight:700; padding:8px 0; border-radius:12px; cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; }
+.mode-btn.active{ background:var(--grad); color:var(--grad-ink); border-color:transparent; }
+
+/* ---- Sous-titrage TV/radio ---- */
+.caption-hint{ text-align:center; font-size:11px; color:var(--ink-soft); padding:12px 24px 4px; }
+.big-captions{ flex:1; display:flex; align-items:center; justify-content:center; padding:10px 20px; overflow-y:auto; }
+.big-captions .cc-empty{ color:var(--ink-soft); font-size:13px; text-align:center; opacity:.7; }
+.big-captions .cc-text{ font-size:22px; font-weight:700; line-height:1.35; text-align:center; color:var(--ink); }
+
+/* ---- Urgence / SOS ---- */
+.urgence-quick-btn{ margin:0 16px 16px; border:1px solid var(--line); background:var(--panel); color:var(--ink); font-size:12px; font-weight:700; padding:12px; border-radius:14px; cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; }
+.urgence-card-big{ margin:16px; background:var(--grad); border-radius:22px; padding:26px 18px; text-align:center; }
+.ub-title{ font-family:'Instrument Serif', serif; font-style:italic; font-size:22px; color:#2B1710; }
+.urgence-options{ display:flex; flex-direction:column; gap:8px; padding:4px 16px 16px; }
+.urgence-opt-btn{ text-align:left; border:1.5px solid var(--line); background:var(--panel); color:var(--ink); font-size:12.5px; font-weight:600; padding:11px 14px; border-radius:14px; cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; }
+.urgence-opt-btn.active{ border-color:var(--coral); background:var(--amber-bg); }
+.sos-section{ padding:6px 16px 16px; margin-top:auto; }
+.sos-btn{ width:100%; border:none; background:var(--danger); color:#fff; font-weight:800; font-size:13px; padding:13px; border-radius:14px; cursor:pointer; margin:4px 0 10px; }
+.sos-status{ font-size:11.5px; color:var(--sage); text-align:center; margin-bottom:10px; }
+.sos-contact-row{ display:flex; justify-content:space-between; align-items:center; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:9px 12px; font-size:12px; }
+.sos-edit{ border:none; background:none; color:var(--coral); font-weight:700; font-size:11px; cursor:pointer; }
+
+/* ---- Recherche historique ---- */
+.search-row{ display:flex; gap:8px; padding:12px 16px 6px; }
+.search-input{ flex:1; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:12px; padding:9px 12px; font-family:'Plus Jakarta Sans',sans-serif; font-size:12px; }
+.search-input::placeholder{ color:var(--ink-soft); }
+.search-go-btn{ border:none; background:var(--grad); color:var(--grad-ink); width:38px; border-radius:12px; cursor:pointer; font-size:14px; }
+.hist-search-answer{ margin:0 16px 12px; background:var(--amber-bg); border:1px solid rgba(255,181,98,0.3); border-radius:12px; padding:11px 13px; font-size:12px; line-height:1.5; color:var(--ink); }
+.hist-search-answer .lbl{ display:block; font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:var(--amber); margin-bottom:4px; }
+.hist-item{ padding:12px 18px; border-bottom:1px solid var(--line); }
+.hist-item .t{ font-size:13px; font-weight:700; }
+.hist-item .d{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
+
+/* ---- Dashboard ---- */
+.stat-row{ display:flex; gap:10px; padding:16px; }
+.stat{ flex:1; background:var(--panel); border-radius:14px; padding:12px; border:1px solid var(--line); }
+.stat .n{ font-family:'Plus Jakarta Sans',sans-serif; font-size:20px; font-weight:800; background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.stat .l{ font-size:10.5px; color:var(--ink-soft); margin-top:2px; }
+.bars{ display:flex; align-items:flex-end; gap:7px; height:90px; padding:10px 18px; }
+.bars .b{ flex:1; background:var(--purple-bg); border-radius:4px 4px 0 0; }
+.bars .b.on{ background:var(--purple); }
+
+/* ---- Reglages ---- */
+.set-item{ display:flex; justify-content:space-between; align-items:center; padding:13px 18px; border-bottom:1px solid var(--line); font-size:13px; }
+.set-item.as-btn{ width:100%; background:none; border:none; border-bottom:1px solid var(--line); cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; text-align:left; color:var(--ink); }
+.chev{ color:var(--ink-soft); opacity:.6; font-size:13px; }
+
+/* ---- Profils de sensibilité ---- */
+.profil-active-banner{ margin:14px 16px 4px; padding:10px 14px; background:var(--purple-bg); color:var(--purple); border-radius:12px; font-size:12.5px; font-weight:700; }
+.profil-list{ flex:1; overflow-y:auto; padding:10px 16px 16px; display:flex; flex-direction:column; gap:10px; }
+.profil-card{ text-align:left; border:1.5px solid var(--line); background:var(--panel); border-radius:16px; padding:12px 14px; cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; }
+.profil-card.active{ border-color:var(--purple); background:var(--purple-bg); }
+.pc-top{ display:flex; justify-content:space-between; align-items:center; }
+.pc-ic{ font-size:18px; }
+.pc-check{ opacity:0; color:var(--purple); font-weight:900; }
+.profil-card.active .pc-check{ opacity:1; }
+.pc-title{ font-size:13.5px; font-weight:700; color:var(--ink); margin-top:6px; }
+.profil-card.active .pc-title{ color:var(--purple); }
+.pc-desc{ font-size:11px; color:var(--ink-soft); line-height:1.4; margin-top:3px; }
+
+/* ---- Alertes intelligentes ---- */
+.alert-list{ flex:1; overflow-y:auto; padding:8px 16px 16px; }
+.alert-cat{ font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); padding:12px 2px 6px; }
+.alert-row{ display:flex; align-items:center; gap:8px; padding:9px 2px; border-bottom:1px solid var(--line); }
+.ar-ic{ font-size:15px; width:20px; text-align:center; flex-shrink:0; }
+.ar-label{ flex:1; font-size:12.5px; color:var(--ink); }
+.prio-pill{ border:none; background:var(--panel-raised); color:var(--ink-soft); font-size:10px; font-weight:700; padding:4px 9px; border-radius:20px; cursor:pointer; flex-shrink:0; }
+.prio-pill[data-prio="vibration"]{ background:var(--spk-b-bg); color:var(--spk-b); }
+.prio-pill[data-prio="fort"]{ background:var(--amber-bg); color:var(--amber); }
+.toggle{ width:36px; height:21px; border-radius:11px; background:var(--panel-raised); border:1px solid var(--line); position:relative; cursor:pointer; flex-shrink:0; padding:0; }
+.toggle::after{ content:''; position:absolute; top:1px; left:1px; width:17px; height:17px; border-radius:50%; background:var(--ink-soft); transition:left .15s ease, background .15s ease; }
+.toggle.on{ background:var(--grad); border-color:transparent; }
+.toggle.on::after{ left:16px; background:#2B1710; }
+</style>
+
+<div class="audyo-root">
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="app">
+
+      <!-- ================= ACCUEIL ================= -->
+      <div class="screen active" data-screen="home">
+        <div class="home-header">
+          <div class="brand">Audy<span>O</span></div>
+          <div class="mlabel">Mieux entendre. Mieux comprendre. Mieux communiquer.</div>
+        </div>
+        <div class="home-grid">
+          <button class="home-card" style="background:var(--spk-a-bg)" data-goto="conversation">
+            <div class="ic">💬</div><div class="t" style="color:var(--spk-a)">Conversation</div><div class="d">Transcription en direct</div>
+          </button>
+          <button class="home-card" style="background:var(--spk-b-bg)" data-goto="ecoute">
+            <div class="ic">🔊</div><div class="t" style="color:var(--teal)">Écoute assistée</div><div class="d">Amplification & clarté</div>
+          </button>
+          <button class="home-card" style="background:var(--amber-bg)" data-goto="traduction">
+            <div class="ic">🌐</div><div class="t" style="color:var(--amber)">Traduction</div><div class="d">Échange bilingue</div>
+          </button>
+          <button class="home-card" style="background:var(--purple-bg)" data-goto="reunion">
+            <div class="ic">📋</div><div class="t" style="color:var(--purple)">Réunion</div><div class="d">Multi-participants</div>
+          </button>
+        </div>
+        <button class="urgence-quick-btn" data-goto="urgence">🆘 Carte de communication d'urgence</button>
+      </div>
+
+      <!-- ================= CONVERSATION ================= -->
+      <div class="screen" data-screen="conversation">
+        <div class="topbar">
+          <button class="back" data-goto="home">‹ Accueil</button>
+          <div class="mlabel">Conversation</div><div style="width:50px"></div>
+        </div>
+        <div class="mode-switch">
+          <button class="mode-btn active" data-convmode="standard">Standard</button>
+          <button class="mode-btn" data-convmode="medical">🩺 RDV médical</button>
+        </div>
+        <div class="mic-zone">
+          <div class="mic-wrap">
+            <div class="ring" id="ring1"></div><div class="ring" id="ring2"></div>
+            <button id="micBtn" class="mic-btn">🎙</button>
+          </div>
+          <div class="hint" id="hint">Posez le téléphone sur la table et appuyez sur le micro.</div>
+        </div>
+        <div class="speaker-row">
+          <button class="spk active" data-spk="0">Locuteur 1</button>
+          <button class="spk" data-spk="1">Locuteur 2</button>
+        </div>
+        <div class="diarization-note" id="convModeNote">Identification manuelle du locuteur actif — voir dossier technique §4.3.</div>
+        <div class="transcript" id="transcript">
+          <div class="empty-state" id="emptyState"><b>Aucune conversation en cours.</b><br>Appuyez sur le micro et parlez normalement.</div>
+        </div>
+        <div class="bottombar">
+          <button class="btn-secondary" id="resetBtn">Effacer</button>
+          <button class="btn-primary" id="summaryBtn" disabled>Résumé IA</button>
+        </div>
+        <div class="summary-panel" id="summaryPanel">
+          <div class="summary-header"><h3 id="summaryTitle">Résumé de la conversation</h3><button id="closeSummary">✕</button></div>
+          <div class="summary-body" id="summaryBody"></div>
+        </div>
+      </div>
+
+      <!-- ================= ECOUTE ASSISTEE ================= -->
+      <div class="screen" data-screen="ecoute">
+        <div class="topbar"><button class="back" data-goto="home">‹ Accueil</button><div class="mlabel">Écoute assistée</div><div style="width:50px"></div></div>
+
+        <div class="mode-switch">
+          <button class="mode-btn active" data-mode="ampli">Amplification</button>
+          <button class="mode-btn" data-mode="captions">Sous-titres</button>
+        </div>
+
+        <div id="ampliMode" style="flex:1; display:flex; flex-direction:column; min-height:0;">
+          <div class="eq" id="eqBars">
+            <div class="bar" style="height:8%"></div><div class="bar" style="height:8%"></div><div class="bar" style="height:8%"></div>
+            <div class="bar" style="height:8%"></div><div class="bar" style="height:8%"></div><div class="bar" style="height:8%"></div><div class="bar" style="height:8%"></div>
+          </div>
+
+          <button id="ampliToggleBtn" class="btn-primary" style="margin:2px 16px 4px; flex:none;">🎧 Démarrer l'écoute amplifiée</button>
+          <div class="ampli-warning">Utilisez des écouteurs — au haut-parleur, le micro et la sortie audio trop proches provoquent un effet Larsen (sifflement).</div>
+
+          <div class="ampli-controls" id="ampliControls">
+            <div class="slider-row">
+              <div class="slider-label"><span>Amplification</span><span class="slider-val" id="valGain">100%</span></div>
+              <input type="range" id="sliderGain" min="0" max="250" value="100" class="audyo-slider">
+            </div>
+            <div class="slider-row">
+              <div class="slider-label"><span>Graves (basses)</span><span class="slider-val" id="valBass">0 dB</span></div>
+              <input type="range" id="sliderBass" min="-12" max="12" value="0" class="audyo-slider">
+            </div>
+            <div class="slider-row">
+              <div class="slider-label"><span>Médiums</span><span class="slider-val" id="valMid">0 dB</span></div>
+              <input type="range" id="sliderMid" min="-12" max="12" value="0" class="audyo-slider">
+            </div>
+            <div class="slider-row">
+              <div class="slider-label"><span>Aigus</span><span class="slider-val" id="valTreble">0 dB</span></div>
+              <input type="range" id="sliderTreble" min="-12" max="12" value="0" class="audyo-slider">
+            </div>
+          </div>
+
+          <div class="rowline">Bluetooth <span class="pill-sm">Appareil connecté</span></div>
+          <div class="rowline" style="border-bottom:none">Focus voix <span class="pill-sm">Bientôt disponible</span></div>
+          <div class="wip">Amplification, graves/médiums/aigus et le niveau affiché ci-dessus sont réels (Web Audio API) une fois l'écoute démarrée. Bluetooth et réduction de bruit restent des aperçus (dossier §3.2).</div>
+        </div>
+
+        <div id="captionsMode" style="display:none; flex:1; flex-direction:column; min-height:0;">
+          <div class="caption-hint">Posez le téléphone près de la télévision ou de la source sonore, puis démarrez.</div>
+          <div class="big-captions" id="bigCaptions">
+            <div class="cc-empty">Les sous-titres apparaîtront ici en direct, en grand format.</div>
+          </div>
+          <div class="bottombar">
+            <button class="btn-primary" id="ccMicBtn" style="flex:1;">🎙 Démarrer les sous-titres</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= TRADUCTION ================= -->
+      <div class="screen" data-screen="traduction">
+        <div class="topbar"><button class="back" data-goto="home">‹ Accueil</button><div class="mlabel">Traduction</div><div style="width:50px"></div></div>
+
+        <div class="lang-picker">
+          <select id="tSourceLang" class="lang-select"></select>
+          <button id="tSwapBtn" class="swap-btn" title="Inverser les langues">⇄</button>
+          <select id="tTargetLang" class="lang-select"></select>
+        </div>
+
+        <div class="mic-zone" style="padding:10px 0 8px;">
+          <div class="mic-wrap" style="width:72px; height:72px;">
+            <div class="ring" id="tRing1"></div><div class="ring" id="tRing2"></div>
+            <button id="tMicBtn" class="mic-btn mic-btn-sm">🎙</button>
+          </div>
+          <div class="hint" id="tHint">Choisissez vos langues, puis appuyez sur le micro.</div>
+        </div>
+
+        <div class="trans-list" id="transList">
+          <div class="empty-state" id="tEmptyState"><b>Aucune traduction en cours.</b><br>Parlez dans la langue source, la traduction apparaîtra à droite.</div>
+        </div>
+
+        <div class="bottombar">
+          <button class="btn-secondary" id="tResetBtn">Effacer</button>
+        </div>
+      </div>
+
+      <!-- ================= REUNION ================= -->
+      <div class="screen" data-screen="reunion">
+        <div class="topbar"><button class="back" data-goto="home">‹ Accueil</button><div class="mlabel">Réunion</div><div style="width:50px"></div></div>
+
+        <!-- Vue configuration : gestion des participants -->
+        <div id="reunionSetup" class="reunion-setup">
+          <div class="section-label" style="padding-top:4px;">Participants</div>
+          <div class="participant-list" id="participantList"></div>
+
+          <div class="add-participant-row">
+            <input type="text" id="newParticipantName" class="participant-input" placeholder="Nom du participant" maxlength="24">
+            <button id="addParticipantBtn" class="add-btn">Ajouter</button>
+          </div>
+
+          <div class="voice-note">
+            🎙 « Échantillon vocal » enregistre 3 secondes de voix par participant, pour préparer une future reconnaissance automatique. <b>Aujourd'hui, l'identification pendant la réunion reste manuelle</b> (vous tapez sur le nom qui parle) — reconnaître un timbre de voix en temps réel demande un moteur d'IA vocale dédié côté serveur, qui n'est pas encore branché.
+          </div>
+
+          <button id="startReunionBtn" class="btn-primary" style="margin:6px 16px 16px; flex:none;" disabled>Démarrer la réunion</button>
+        </div>
+
+        <!-- Vue en direct : transcription multi-participants -->
+        <div id="reunionLive" class="reunion-live" style="display:none;">
+          <div class="mic-zone" style="padding:14px 0 8px;">
+            <div class="mic-wrap" style="width:72px; height:72px;">
+              <div class="ring" id="rRing1"></div><div class="ring" id="rRing2"></div>
+              <button id="rMicBtn" class="mic-btn mic-btn-sm">🎙</button>
+            </div>
+            <div class="hint" id="rHint">Touchez le nom de la personne qui parle, puis le micro.</div>
+          </div>
+
+          <div class="participant-chip-row" id="participantChipRow"></div>
+
+          <div class="transcript" id="rTranscript">
+            <div class="empty-state" id="rEmptyState"><b>Aucune prise de parole enregistrée.</b><br>Sélectionnez qui parle, puis démarrez le micro.</div>
+          </div>
+
+          <div class="bottombar">
+            <button class="btn-secondary" id="endReunionBtn">Terminer</button>
+            <button class="btn-primary" id="rSummaryBtn" disabled>Résumé IA</button>
+          </div>
+
+          <div class="summary-panel" id="rSummaryPanel">
+            <div class="summary-header"><h3>Compte-rendu de réunion</h3><button id="rCloseSummary">✕</button></div>
+            <div class="summary-body" id="rSummaryBody"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= HISTORIQUE ================= -->
+      <div class="screen" data-screen="historique">
+        <div class="topbar"><div class="brand">Audy<span>O</span></div><div class="mlabel">Historique</div></div>
+
+        <div class="search-row">
+          <input type="text" id="histSearchInput" class="search-input" placeholder="Rechercher dans cette session (ex. « qu'a dit Marie sur le budget »)">
+          <button id="histSearchBtn" class="search-go-btn">🔍</button>
+        </div>
+        <div id="histSearchAnswer" class="hist-search-answer" style="display:none;"></div>
+
+        <div class="hist-item"><div class="t">Réunion — Point budget Q3</div><div class="d">Aujourd'hui · 14:02 · 3 participants</div></div>
+        <div class="hist-item"><div class="t">Conversation — Marie</div><div class="d">Hier · 18:40 · 2 locuteurs</div></div>
+        <div class="hist-item"><div class="t">Traduction — FR → EN</div><div class="d">Lundi · 09:15</div></div>
+        <div class="hist-item"><div class="t">Conversation — Médecin</div><div class="d">28 juillet · 11:30</div></div>
+        <div class="wip">La recherche ci-dessus interroge réellement ce que vous avez dit dans Conversation/Réunion durant cette session. La liste ci-dessous reste un aperçu visuel — l'archivage chiffré permanent est à brancher sur le backend (dossier §3.8).</div>
+      </div>
+
+      <!-- ================= URGENCE / SOS ================= -->
+      <div class="screen" data-screen="urgence">
+        <div class="topbar"><button class="back" data-goto="home">‹ Accueil</button><div class="mlabel">Communication d'urgence</div><div style="width:50px"></div></div>
+
+        <div class="urgence-card-big">
+          <div class="ub-title">Je suis malentendant</div>
+        </div>
+        <div class="urgence-options">
+          <button class="urgence-opt-btn active" data-msg="Merci de parler face à moi, lentement.">💬 Parlez face à moi</button>
+          <button class="urgence-opt-btn" data-msg="Merci d'écrire votre message ici.">✍️ Écrivez votre message</button>
+          <button class="urgence-opt-btn" data-msg="Merci de patienter, j'active la transcription.">🎙 J'active la transcription</button>
+        </div>
+
+        <div class="sos-section">
+          <div class="section-label" style="padding-left:0;">En cas d'urgence</div>
+          <button id="sosBtn" class="sos-btn">🆘 Envoyer une alerte SOS</button>
+          <div id="sosStatus" class="sos-status" style="display:none;"></div>
+          <div class="sos-contact-row">
+            <span>👤 Julie — contact de confiance</span><button class="sos-edit">Modifier</button>
+          </div>
+          <div class="wip" style="padding-top:10px;">Interface réelle et interactive. L'envoi effectif d'un SMS et d'une localisation à un tiers nécessite un service tiers (API SMS + géolocalisation) non branché ici.</div>
+        </div>
+      </div>
+
+      <!-- ================= DASHBOARD ================= -->
+      <div class="screen" data-screen="dashboard">
+        <div class="topbar"><div class="brand">Audy<span>O</span></div><div class="mlabel">Tableau de bord</div></div>
+        <div class="stat-row">
+          <div class="stat"><div class="n">4h12</div><div class="l">Écoute assistée</div></div>
+          <div class="stat"><div class="n">12</div><div class="l">Conversations</div></div>
+        </div>
+        <div class="section-label">Activité — 7 derniers jours</div>
+        <div class="bars">
+          <div class="b" style="height:30%"></div><div class="b on" style="height:60%"></div><div class="b" style="height:40%"></div>
+          <div class="b on" style="height:80%"></div><div class="b" style="height:35%"></div><div class="b" style="height:50%"></div><div class="b on" style="height:70%"></div>
+        </div>
+      </div>
+
+      <!-- ================= REGLAGES ================= -->
+      <div class="screen" data-screen="reglages">
+        <div class="topbar"><div class="brand">Audy<span>O</span></div><div class="mlabel">Réglages</div></div>
+        <div class="set-item"><span>👤 Profils auditifs</span><span class="chev">›</span></div>
+        <button class="set-item as-btn" data-goto="profils"><span>🎚️ Profils de sensibilité</span><span class="chev">›</span></button>
+        <button class="set-item as-btn" data-goto="alertes"><span>🔔 Alertes intelligentes</span><span class="chev">›</span></button>
+        <div class="set-item"><span>🌐 Langues</span><span class="chev">›</span></div>
+        <div class="set-item"><span>🔵 Appareils Bluetooth</span><span class="chev">›</span></div>
+        <div class="set-item"><span>🔒 Confidentialité & données</span><span class="chev">›</span></div>
+        <div class="set-item"><span>♿ Accessibilité</span><span class="chev">›</span></div>
+      </div>
+
+      <!-- ================= PROFILS DE SENSIBILITE ================= -->
+      <div class="screen" data-screen="profils">
+        <div class="topbar"><button class="back" data-goto="reglages">‹ Réglages</button><div class="mlabel">Profils de sensibilité</div><div style="width:50px"></div></div>
+        <div class="profil-active-banner">Profil actif : <span id="profilActifLabel">Urbain</span></div>
+        <div class="profil-list" id="profilList">
+          <button class="profil-card" data-profil="reunion">
+            <div class="pc-top"><span class="pc-ic">🧑‍🤝‍🧑</span><span class="pc-check">✓</span></div>
+            <div class="pc-title">Réunion</div>
+            <div class="pc-desc">Focus vocal maximal, bruit de fond coupé, alertes silencieuses sauf urgence.</div>
+          </button>
+          <button class="profil-card" data-profil="transport">
+            <div class="pc-top"><span class="pc-ic">🚆</span><span class="pc-check">✓</span></div>
+            <div class="pc-title">Transport</div>
+            <div class="pc-desc">Amplification renforcée, bruit moteur réduit, klaxon et sirène en priorité haute.</div>
+          </button>
+          <button class="profil-card" data-profil="famille">
+            <div class="pc-top"><span class="pc-ic">👨‍👩‍👧</span><span class="pc-check">✓</span></div>
+            <div class="pc-title">En famille</div>
+            <div class="pc-desc">Réglage équilibré, alerte pleurs de bébé en priorité haute.</div>
+          </button>
+          <button class="profil-card active" data-profil="urbain">
+            <div class="pc-top"><span class="pc-ic">🏙️</span><span class="pc-check">✓</span></div>
+            <div class="pc-title">Urbain</div>
+            <div class="pc-desc">Bruit de rue réduit, alertes sirène/klaxon actives, écho extérieur atténué.</div>
+          </button>
+          <button class="profil-card" data-profil="nuit">
+            <div class="pc-top"><span class="pc-ic">🌙</span><span class="pc-check">✓</span></div>
+            <div class="pc-title">Nuit / Repos</div>
+            <div class="pc-desc">Amplification minimale, seules les alertes critiques restent actives.</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- ================= ALERTES INTELLIGENTES ================= -->
+      <div class="screen" data-screen="alertes">
+        <div class="topbar"><button class="back" data-goto="reglages">‹ Réglages</button><div class="mlabel">Alertes intelligentes</div><div style="width:50px"></div></div>
+        <div class="alert-list" id="alertList">
+
+          <div class="alert-cat">Sécurité</div>
+          <div class="alert-row" data-alert="Sirène"><span class="ar-ic">🚨</span><span class="ar-label">Sirène</span><button class="prio-pill" data-prio="fort">Son fort</button><button class="toggle on"></button></div>
+          <div class="alert-row" data-alert="Alarme incendie"><span class="ar-ic">🔥</span><span class="ar-label">Alarme incendie / fumée</span><button class="prio-pill" data-prio="fort">Son fort</button><button class="toggle on"></button></div>
+          <div class="alert-row" data-alert="Alarme voiture"><span class="ar-ic">🚗</span><span class="ar-label">Alarme voiture</span><button class="prio-pill" data-prio="vibration">Vibration</button><button class="toggle on"></button></div>
+
+          <div class="alert-cat">Domicile</div>
+          <div class="alert-row" data-alert="Sonnette"><span class="ar-ic">🔔</span><span class="ar-label">Sonnette maison</span><button class="prio-pill" data-prio="fort">Son fort</button><button class="toggle on"></button></div>
+          <div class="alert-row" data-alert="Coup à la porte"><span class="ar-ic">🚪</span><span class="ar-label">Coup frappé à la porte</span><button class="prio-pill" data-prio="vibration">Vibration</button><button class="toggle on"></button></div>
+          <div class="alert-row" data-alert="Minuteur"><span class="ar-ic">⏲️</span><span class="ar-label">Minuteur four / micro-ondes</span><button class="prio-pill" data-prio="discret">Discret</button><button class="toggle"></button></div>
+          <div class="alert-row" data-alert="Eau qui coule"><span class="ar-ic">🚰</span><span class="ar-label">Eau qui coule en continu</span><button class="prio-pill" data-prio="discret">Discret</button><button class="toggle"></button></div>
+
+          <div class="alert-cat">Communication</div>
+          <div class="alert-row" data-alert="Téléphone"><span class="ar-ic">📱</span><span class="ar-label">Sonnerie téléphone</span><button class="prio-pill" data-prio="vibration">Vibration</button><button class="toggle on"></button></div>
+          <div class="alert-row" data-alert="Prénom"><span class="ar-ic">🗣️</span><span class="ar-label">Appel de mon prénom</span><button class="prio-pill" data-prio="vibration">Vibration</button><button class="toggle on"></button></div>
+          <div class="alert-row" data-alert="Notification appareil"><span class="ar-ic">🔊</span><span class="ar-label">Notification d'un appareil</span><button class="prio-pill" data-prio="discret">Discret</button><button class="toggle"></button></div>
+
+          <div class="alert-cat">Famille</div>
+          <div class="alert-row" data-alert="Pleurs de bébé"><span class="ar-ic">👶</span><span class="ar-label">Pleurs de bébé</span><button class="prio-pill" data-prio="fort">Son fort</button><button class="toggle on"></button></div>
+          <div class="alert-row" data-alert="Aboiement"><span class="ar-ic">🐕</span><span class="ar-label">Aboiement de chien insistant</span><button class="prio-pill" data-prio="discret">Discret</button><button class="toggle"></button></div>
+
+          <div class="alert-cat">Circulation</div>
+          <div class="alert-row" data-alert="Klaxon"><span class="ar-ic">📢</span><span class="ar-label">Klaxon</span><button class="prio-pill" data-prio="vibration">Vibration</button><button class="toggle on"></button></div>
+          <div class="alert-row" data-alert="Klaxon recul"><span class="ar-ic">🚛</span><span class="ar-label">Klaxon de recul / véhicule utilitaire</span><button class="prio-pill" data-prio="discret">Discret</button><button class="toggle"></button></div>
+          <div class="alert-row" data-alert="Crissement"><span class="ar-ic">🛞</span><span class="ar-label">Crissement de pneus</span><button class="prio-pill" data-prio="discret">Discret</button><button class="toggle"></button></div>
+
+        </div>
+      </div>
+
+      <!-- ================= NAVIGATION BASSE ================= -->
+      <div class="tabbar" id="tabbar">
+        <button class="tab active" data-tab="home"><span class="dot"></span>Accueil</button>
+        <button class="tab" data-tab="historique"><span class="dot"></span>Historique</button>
+        <button class="tab" data-tab="dashboard"><span class="dot"></span>Tableau de bord</button>
+        <button class="tab" data-tab="reglages"><span class="dot"></span>Réglages</button>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  const screens = document.querySelectorAll('.screen');
+  const tabs = document.querySelectorAll('.tab');
+  const tabbar = document.getElementById('tabbar');
+
+  function showScreen(name){
+    screens.forEach(s => s.classList.toggle('active', s.dataset.screen === name));
+    const isTabScreen = ['home','historique','dashboard','reglages'].includes(name);
+    tabbar.style.display = isTabScreen ? 'flex' : 'none';
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  }
+
+  document.querySelectorAll('[data-goto]').forEach(el => {
+    el.addEventListener('click', () => showScreen(el.dataset.goto));
+  });
+  tabs.forEach(t => t.addEventListener('click', () => showScreen(t.dataset.tab)));
+
+  // URL du backend AudyO — modifiez cette valeur si votre serveur tourne ailleurs.
+  const BACKEND_URL = 'https://audyo-backend.onrender.com';
+
+  // Stockage en mémoire de la session (Conversation + Réunion), pour la recherche
+  // en langage naturel de l'écran Historique. Pas de persistance réelle ici —
+  // l'archivage chiffré durable reste à brancher sur le backend (dossier §3.8).
+  window.audyoSession = { conversation: [], reunion: [] };
+
+  // ---- Logique réelle du module Conversation (identique au prototype précédent) ----
+  const micBtn = document.getElementById('micBtn');
+  const hint = document.getElementById('hint');
+  const transcriptEl = document.getElementById('transcript');
+  const emptyState = document.getElementById('emptyState');
+  const ring1 = document.getElementById('ring1');
+  const ring2 = document.getElementById('ring2');
+  const summaryBtn = document.getElementById('summaryBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const summaryPanel = document.getElementById('summaryPanel');
+  const summaryBody = document.getElementById('summaryBody');
+  const summaryTitle = document.getElementById('summaryTitle');
+  const closeSummary = document.getElementById('closeSummary');
+  const speakerBtns = document.querySelectorAll('.spk');
+  const convModeBtns = document.querySelectorAll('[data-convmode]');
+  const convModeNote = document.getElementById('convModeNote');
+
+  let currentSpeaker = 0, listening = false, recognition = null, interimBubble = null;
+  let segments = [], audioCtx, analyser, micStream, rafId;
+  let convMode = 'standard';
+  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  convModeBtns.forEach(btn => btn.addEventListener('click', () => {
+    convMode = btn.dataset.convmode;
+    convModeBtns.forEach(b => b.classList.toggle('active', b === btn));
+    convModeNote.textContent = convMode === 'medical'
+      ? "Mode RDV médical : le résumé structurera diagnostic, prescriptions et prochaines étapes."
+      : "Identification manuelle du locuteur actif — voir dossier technique §4.3.";
+  }));
+
+  speakerBtns.forEach(btn => btn.addEventListener('click', () => {
+    currentSpeaker = parseInt(btn.dataset.spk, 10);
+    speakerBtns.forEach(b => b.classList.toggle('active', b === btn));
+  }));
+
+  function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function addBubble(speaker, text, isInterim){
+    if (emptyState && emptyState.parentNode) emptyState.remove();
+    const b = document.createElement('div');
+    b.className = 'bubble spk' + speaker + (isInterim ? ' interim' : '');
+    const time = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+    b.innerHTML = '<span class="meta">Locuteur ' + (speaker+1) + ' · ' + time + '</span>' + escapeHtml(text);
+    return b;
+  }
+  function scrollToBottom(){ transcriptEl.scrollTop = transcriptEl.scrollHeight; }
+
+  function startAudioMeter(stream){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser(); analyser.fftSize = 512;
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    function tick(){
+      analyser.getByteFrequencyData(data);
+      let sum = 0; for (let i=0;i<data.length;i++) sum += data[i];
+      const level = Math.min(1, (sum/data.length)/60);
+      ring1.style.transform = 'scale(' + (1+level*0.55).toFixed(3) + ')';
+      ring2.style.transform = 'scale(' + (1+level*0.9).toFixed(3) + ')';
+      ring1.style.opacity = 0.5+level*0.5; ring2.style.opacity = Math.max(0,0.35-level*0.1);
+      rafId = requestAnimationFrame(tick);
+    }
+    tick();
+  }
+  function stopAudioMeter(){
+    if (rafId) cancelAnimationFrame(rafId);
+    if (audioCtx) audioCtx.close();
+    ring1.style.transform='scale(1)'; ring1.style.opacity=0;
+    ring2.style.transform='scale(1)'; ring2.style.opacity=0;
+    if (micStream) micStream.getTracks().forEach(t => t.stop());
+  }
+
+  async function startListening(){
+    if (!SpeechRecognitionImpl){ hint.textContent = "Reconnaissance vocale indisponible ici — utilisez Chrome ou Edge."; return; }
+    try{ micStream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
+    catch(e){ hint.textContent = "Accès micro refusé."; return; }
+    startAudioMeter(micStream);
+    recognition = new SpeechRecognitionImpl();
+    recognition.lang = 'fr-FR'; recognition.continuous = true; recognition.interimResults = true;
+    recognition.onresult = (event) => {
+      let interimText = '';
+      for (let i = event.resultIndex; i < event.results.length; i++){
+        const res = event.results[i];
+        if (res.isFinal){
+          const text = res[0].transcript.trim();
+          if (text){
+            segments.push({ speaker: currentSpeaker, text });
+            window.audyoSession.conversation = segments;
+            if (interimBubble){ interimBubble.remove(); interimBubble = null; }
+            transcriptEl.appendChild(addBubble(currentSpeaker, text, false));
+            summaryBtn.disabled = segments.length === 0;
+            scrollToBottom();
+          }
+        } else { interimText += res[0].transcript; }
+      }
+      if (interimText){
+        if (!interimBubble){ interimBubble = addBubble(currentSpeaker, interimText, true); transcriptEl.appendChild(interimBubble); }
+        else { interimBubble.innerHTML = '<span class="meta">Locuteur ' + (currentSpeaker+1) + ' · en cours…</span>' + escapeHtml(interimText); }
+        scrollToBottom();
+      }
+    };
+    recognition.onerror = (e) => { if (e.error !== 'no-speech') hint.textContent = "Petit souci d'écoute — réessayez."; };
+    recognition.onend = () => { if (listening){ try{ recognition.start(); }catch(e){} } };
+    recognition.start();
+    listening = true; micBtn.classList.add('listening'); hint.textContent = "Écoute en cours…";
+  }
+  function stopListening(){
+    listening = false;
+    if (recognition){ recognition.onend = null; recognition.stop(); }
+    stopAudioMeter();
+    if (interimBubble){ interimBubble.remove(); interimBubble = null; }
+    micBtn.classList.remove('listening');
+    hint.textContent = segments.length ? "Écoute en pause." : "Posez le téléphone sur la table et appuyez sur le micro.";
+  }
+  micBtn.addEventListener('click', () => listening ? stopListening() : startListening());
+  resetBtn.addEventListener('click', () => {
+    segments = []; transcriptEl.innerHTML = '';
+    const es = document.createElement('div'); es.className='empty-state'; es.id='emptyState';
+    es.innerHTML = '<b>Aucune conversation en cours.</b><br>Appuyez sur le micro et parlez normalement.';
+    transcriptEl.appendChild(es); summaryBtn.disabled = true;
+  });
+  closeSummary.addEventListener('click', () => summaryPanel.classList.remove('open'));
+  summaryBtn.addEventListener('click', async () => {
+    if (segments.length === 0) return;
+    summaryTitle.textContent = convMode === 'medical' ? 'Résumé du rendez-vous médical' : 'Résumé de la conversation';
+    summaryPanel.classList.add('open');
+    summaryBody.innerHTML = '<p class="loading">Génération du résumé…</p>';
+    try{
+      const response = await fetch(BACKEND_URL + '/v1/conversations/summary', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ segments, mode: convMode })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Erreur backend');
+      summaryBody.innerHTML = data.summary.split('\\n').filter(Boolean).map(l => '<p>'+escapeHtml(l)+'</p>').join('');
+    }catch(err){
+      summaryBody.innerHTML = '<p class="err">Le résumé n\'a pas pu être généré (' + escapeHtml(err.message || '') + '). Vérifiez que le backend tourne bien sur ' + BACKEND_URL + '.</p>';
+    }
+  });
+
+  // Coupe le micro de Conversation si on quitte l'écran, pour éviter tout conflit
+  // avec la reconnaissance vocale d'un autre module (un navigateur n'autorise
+  // qu'une seule reconnaissance vocale active à la fois).
+  document.querySelectorAll('[data-goto], .tab').forEach(el => {
+    el.addEventListener('click', () => { if (listening) stopListening(); });
+  });
+})();
+
+// ==================== MODULE TRADUCTION ====================
+(function(){
+  const LANGUAGES = [
+    { code:'fr-FR', label:'Français' },
+    { code:'en-US', label:'English' },
+    { code:'es-ES', label:'Español' },
+    { code:'de-DE', label:'Deutsch' },
+    { code:'it-IT', label:'Italiano' },
+    { code:'pt-PT', label:'Português' },
+    { code:'zh-CN', label:'中文' },
+    { code:'ar-SA', label:'العربية' },
+  ];
+
+  const sourceSel = document.getElementById('tSourceLang');
+  const targetSel = document.getElementById('tTargetLang');
+  const swapBtn = document.getElementById('tSwapBtn');
+  const tMicBtn = document.getElementById('tMicBtn');
+  const tHint = document.getElementById('tHint');
+  const tRing1 = document.getElementById('tRing1');
+  const tRing2 = document.getElementById('tRing2');
+  const transList = document.getElementById('transList');
+  const tEmptyState = document.getElementById('tEmptyState');
+  const tResetBtn = document.getElementById('tResetBtn');
+
+  LANGUAGES.forEach(l => {
+    const o1 = document.createElement('option'); o1.value = l.code; o1.textContent = l.label;
+    const o2 = document.createElement('option'); o2.value = l.code; o2.textContent = l.label;
+    sourceSel.appendChild(o1); targetSel.appendChild(o2);
+  });
+  sourceSel.value = 'fr-FR';
+  targetSel.value = 'en-US';
+
+  swapBtn.addEventListener('click', () => {
+    const a = sourceSel.value; sourceSel.value = targetSel.value; targetSel.value = a;
+  });
+
+  let tListening = false, tRecognition = null, tMicStream = null, tAudioCtx = null, tAnalyser = null, tRaf = null;
+  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function langLabel(code){ const l = LANGUAGES.find(x => x.code === code); return l ? l.label : code; }
+
+  function tStartMeter(stream){
+    tAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = tAudioCtx.createMediaStreamSource(stream);
+    tAnalyser = tAudioCtx.createAnalyser(); tAnalyser.fftSize = 512;
+    source.connect(tAnalyser);
+    const data = new Uint8Array(tAnalyser.frequencyBinCount);
+    function tick(){
+      tAnalyser.getByteFrequencyData(data);
+      let sum = 0; for (let i=0;i<data.length;i++) sum += data[i];
+      const level = Math.min(1, (sum/data.length)/60);
+      tRing1.style.transform = 'scale(' + (1+level*0.55).toFixed(3) + ')';
+      tRing2.style.transform = 'scale(' + (1+level*0.9).toFixed(3) + ')';
+      tRing1.style.opacity = 0.5+level*0.5; tRing2.style.opacity = Math.max(0,0.35-level*0.1);
+      tRaf = requestAnimationFrame(tick);
+    }
+    tick();
+  }
+  function tStopMeter(){
+    if (tRaf) cancelAnimationFrame(tRaf);
+    if (tAudioCtx) tAudioCtx.close();
+    tRing1.style.transform='scale(1)'; tRing1.style.opacity=0;
+    tRing2.style.transform='scale(1)'; tRing2.style.opacity=0;
+    if (tMicStream) tMicStream.getTracks().forEach(t => t.stop());
+  }
+
+  // URL du backend AudyO — modifiez cette valeur si votre serveur tourne ailleurs.
+  const BACKEND_URL = 'https://audyo-backend.onrender.com';
+
+  async function translateText(text){
+    const response = await fetch(BACKEND_URL + '/v1/translate', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ text, sourceLang: sourceSel.value, targetLang: targetSel.value })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Erreur backend');
+    return data.translation;
+  }
+
+  function speak(text, langCode){
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = langCode;
+    window.speechSynthesis.speak(utter);
+  }
+
+  async function addTranslationRow(originalText){
+    if (tEmptyState && tEmptyState.parentNode) tEmptyState.remove();
+    const row = document.createElement('div');
+    row.className = 'trow';
+    row.innerHTML =
+      '<div class="src"><span class="tag">' + escapeHtml(langLabel(sourceSel.value)) + '</span><br>' + escapeHtml(originalText) + '</div>' +
+      '<div class="tgt loading"><span class="txt">Traduction…</span></div>';
+    transList.appendChild(row);
+    transList.scrollTop = transList.scrollHeight;
+
+    try{
+      const translated = await translateText(originalText);
+      const tgtLang = targetSel.value;
+      const tgt = row.querySelector('.tgt');
+      tgt.classList.remove('loading');
+      tgt.innerHTML = '<span class="txt">' + escapeHtml(translated) + '</span><button class="speak-btn" title="Écouter">🔊</button>';
+      tgt.querySelector('.speak-btn').addEventListener('click', () => speak(translated, tgtLang));
+      speak(translated, tgtLang); // lecture automatique de la traduction
+    }catch(e){
+      const tgt = row.querySelector('.tgt');
+      tgt.classList.remove('loading');
+      tgt.innerHTML = '<span class="txt" style="color:var(--danger)">Échec — vérifiez que le backend tourne sur ' + escapeHtml(BACKEND_URL) + '.</span>';
+    }
+    transList.scrollTop = transList.scrollHeight;
+  }
+
+  async function tStartListening(){
+    if (!SpeechRecognitionImpl){ tHint.textContent = "Reconnaissance vocale indisponible ici — utilisez Chrome ou Edge."; return; }
+    try{ tMicStream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
+    catch(e){ tHint.textContent = "Accès micro refusé."; return; }
+    tStartMeter(tMicStream);
+
+    tRecognition = new SpeechRecognitionImpl();
+    tRecognition.lang = sourceSel.value;
+    tRecognition.continuous = true;
+    tRecognition.interimResults = false;
+
+    tRecognition.onresult = (event) => {
+      for (let i = event.resultIndex; i < event.results.length; i++){
+        const res = event.results[i];
+        if (res.isFinal){
+          const text = res[0].transcript.trim();
+          if (text) addTranslationRow(text);
+        }
+      }
+    };
+    tRecognition.onerror = (e) => { if (e.error !== 'no-speech') tHint.textContent = "Petit souci d'écoute — réessayez."; };
+    tRecognition.onend = () => { if (tListening){ try{ tRecognition.start(); }catch(e){} } };
+
+    tRecognition.start();
+    tListening = true; tMicBtn.classList.add('listening'); tHint.textContent = "Écoute en cours…";
+  }
+  function tStopListening(){
+    tListening = false;
+    if (tRecognition){ tRecognition.onend = null; tRecognition.stop(); }
+    tStopMeter();
+    tMicBtn.classList.remove('listening');
+    tHint.textContent = "Choisissez vos langues, puis appuyez sur le micro.";
+  }
+
+  tMicBtn.addEventListener('click', () => tListening ? tStopListening() : tStartListening());
+  sourceSel.addEventListener('change', () => { if (tListening) tStopListening(); });
+  tResetBtn.addEventListener('click', () => {
+    transList.innerHTML = '';
+    const es = document.createElement('div'); es.className='empty-state'; es.id='tEmptyState';
+    es.innerHTML = '<b>Aucune traduction en cours.</b><br>Parlez dans la langue source, la traduction apparaîtra à droite.';
+    transList.appendChild(es);
+  });
+
+  // Coupe le micro de traduction si on quitte l'écran via l'accueil / la barre basse.
+  document.querySelectorAll('[data-goto], .tab').forEach(el => {
+    el.addEventListener('click', () => { if (tListening) tStopListening(); });
+  });
+})();
+
+// ==================== PROFILS DE SENSIBILITÉ ====================
+(function(){
+  const cards = document.querySelectorAll('.profil-card');
+  const label = document.getElementById('profilActifLabel');
+  const NAMES = { reunion:'Réunion', transport:'Transport', famille:'En famille', urbain:'Urbain', nuit:'Nuit / Repos' };
+
+  cards.forEach(card => {
+    card.addEventListener('click', () => {
+      cards.forEach(c => c.classList.toggle('active', c === card));
+      label.textContent = NAMES[card.dataset.profil] || card.dataset.profil;
+    });
+  });
+})();
+
+// ==================== ALERTES INTELLIGENTES ====================
+(function(){
+  const PRIORITIES = [
+    { key:'discret', label:'Discret' },
+    { key:'vibration', label:'Vibration' },
+    { key:'fort', label:'Son fort' },
+  ];
+
+  document.querySelectorAll('.toggle').forEach(btn => {
+    btn.addEventListener('click', () => btn.classList.toggle('on'));
+  });
+
+  document.querySelectorAll('.prio-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const current = PRIORITIES.findIndex(p => p.key === btn.dataset.prio);
+      const next = PRIORITIES[(current + 1) % PRIORITIES.length];
+      btn.dataset.prio = next.key;
+      btn.textContent = next.label;
+    });
+  });
+})();
+
+// ==================== MODULE RÉUNION ====================
+(function(){
+  const BACKEND_URL = 'https://audyo-backend.onrender.com';
+  const PALETTE = ['#FF8A5B', '#8FC3B5', '#E85D8A', '#FFB562', '#B39DDB', '#7EC8E3'];
+
+  const participantList = document.getElementById('participantList');
+  const newNameInput = document.getElementById('newParticipantName');
+  const addBtn = document.getElementById('addParticipantBtn');
+  const startBtn = document.getElementById('startReunionBtn');
+  const setupView = document.getElementById('reunionSetup');
+  const liveView = document.getElementById('reunionLive');
+  const chipRow = document.getElementById('participantChipRow');
+  const rMicBtn = document.getElementById('rMicBtn');
+  const rHint = document.getElementById('rHint');
+  const rRing1 = document.getElementById('rRing1');
+  const rRing2 = document.getElementById('rRing2');
+  const rTranscript = document.getElementById('rTranscript');
+  const rEmptyState = document.getElementById('rEmptyState');
+  const endBtn = document.getElementById('endReunionBtn');
+  const rSummaryBtn = document.getElementById('rSummaryBtn');
+  const rSummaryPanel = document.getElementById('rSummaryPanel');
+  const rSummaryBody = document.getElementById('rSummaryBody');
+  const rCloseSummary = document.getElementById('rCloseSummary');
+
+  let participants = []; // { id, name, color, hasSample }
+  let nextId = 1;
+  let activeParticipantId = null;
+  let rSegments = [];
+
+  function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function initials(name){ return name.trim().split(/\\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase(); }
+
+  function renderParticipants(){
+    participantList.innerHTML = '';
+    participants.forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'participant-row';
+      row.innerHTML =
+        '<div class="p-avatar" style="background:' + p.color + '">' + escapeHtml(initials(p.name)) + '</div>' +
+        '<div class="p-name">' + escapeHtml(p.name) + '</div>' +
+        '<button class="p-sample-btn' + (p.hasSample ? ' done' : '') + '" data-id="' + p.id + '">' + (p.hasSample ? '✓ Échantillon' : '🎙 Échantillon vocal') + '</button>' +
+        '<button class="p-remove" data-remove="' + p.id + '">✕</button>';
+      participantList.appendChild(row);
+    });
+    startBtn.disabled = participants.length === 0;
+
+    participantList.querySelectorAll('.p-sample-btn').forEach(btn => {
+      btn.addEventListener('click', () => recordSample(parseInt(btn.dataset.id, 10), btn));
+    });
+    participantList.querySelectorAll('[data-remove]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        participants = participants.filter(p => p.id !== parseInt(btn.dataset.remove, 10));
+        renderParticipants();
+      });
+    });
+  }
+
+  async function recordSample(id, btn){
+    const p = participants.find(x => x.id === id);
+    if (!p) return;
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+      btn.textContent = '● Enregistrement…'; btn.classList.add('recording');
+      const recorder = new MediaRecorder(stream);
+      recorder.start();
+      setTimeout(() => {
+        recorder.stop();
+        stream.getTracks().forEach(t => t.stop());
+        p.hasSample = true;
+        renderParticipants();
+      }, 3000);
+    }catch(e){
+      btn.textContent = 'Micro refusé';
+    }
+  }
+
+  addBtn.addEventListener('click', () => {
+    const name = newNameInput.value.trim();
+    if (!name) return;
+    participants.push({ id: nextId++, name, color: PALETTE[(nextId-2) % PALETTE.length], hasSample:false });
+    newNameInput.value = '';
+    renderParticipants();
+  });
+  newNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addBtn.click(); });
+
+  function renderChips(){
+    chipRow.innerHTML = '';
+    participants.forEach(p => {
+      const chip = document.createElement('button');
+      chip.className = 'p-chip' + (p.id === activeParticipantId ? ' active' : '');
+      chip.style.background = p.id === activeParticipantId ? p.color : 'var(--panel)';
+      chip.innerHTML = '<span class="dot" style="background:' + (p.id === activeParticipantId ? 'rgba(43,23,16,0.25)' : p.color) + '"></span>' + escapeHtml(p.name);
+      chip.addEventListener('click', () => { activeParticipantId = p.id; renderChips(); });
+      chipRow.appendChild(chip);
+    });
+  }
+
+  function participantById(id){ return participants.find(p => p.id === id); }
+
+  startBtn.addEventListener('click', () => {
+    if (participants.length === 0) return;
+    activeParticipantId = participants[0].id;
+    setupView.style.display = 'none';
+    liveView.style.display = 'flex';
+    renderChips();
+  });
+  endBtn.addEventListener('click', () => {
+    if (rListening) rStopListening();
+    liveView.style.display = 'none';
+    setupView.style.display = 'flex';
+  });
+
+  // ---- Micro et transcription (même mécanique que Conversation, avec N participants nommés) ----
+  let rListening = false, rRecognition = null, rMicStream = null, rAudioCtx = null, rAnalyser = null, rRaf = null, rInterimBubble = null;
+  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function rAddBubble(participant, text, isInterim){
+    if (rEmptyState && rEmptyState.parentNode) rEmptyState.remove();
+    const b = document.createElement('div');
+    b.className = 'bubble' + (isInterim ? ' interim' : '');
+    b.style.background = isInterim ? 'var(--panel-raised)' : (participant.color + '26');
+    b.style.color = 'var(--ink)';
+    b.style.alignSelf = 'flex-start';
+    b.innerHTML = '<span class="meta" style="color:' + participant.color + '">' + escapeHtml(participant.name) + '</span>' + escapeHtml(text);
+    return b;
+  }
+
+  function rStartMeter(stream){
+    rAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = rAudioCtx.createMediaStreamSource(stream);
+    rAnalyser = rAudioCtx.createAnalyser(); rAnalyser.fftSize = 512;
+    source.connect(rAnalyser);
+    const data = new Uint8Array(rAnalyser.frequencyBinCount);
+    function tick(){
+      rAnalyser.getByteFrequencyData(data);
+      let sum = 0; for (let i=0;i<data.length;i++) sum += data[i];
+      const level = Math.min(1, (sum/data.length)/60);
+      rRing1.style.transform = 'scale(' + (1+level*0.55).toFixed(3) + ')';
+      rRing2.style.transform = 'scale(' + (1+level*0.9).toFixed(3) + ')';
+      rRing1.style.opacity = 0.5+level*0.5; rRing2.style.opacity = Math.max(0,0.35-level*0.1);
+      rRaf = requestAnimationFrame(tick);
+    }
+    tick();
+  }
+  function rStopMeter(){
+    if (rRaf) cancelAnimationFrame(rRaf);
+    if (rAudioCtx) rAudioCtx.close();
+    rRing1.style.transform='scale(1)'; rRing1.style.opacity=0;
+    rRing2.style.transform='scale(1)'; rRing2.style.opacity=0;
+    if (rMicStream) rMicStream.getTracks().forEach(t => t.stop());
+  }
+
+  async function rStartListening(){
+    if (!SpeechRecognitionImpl){ rHint.textContent = "Reconnaissance vocale indisponible ici — utilisez Chrome ou Edge."; return; }
+    try{ rMicStream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
+    catch(e){ rHint.textContent = "Accès micro refusé."; return; }
+    rStartMeter(rMicStream);
+    rRecognition = new SpeechRecognitionImpl();
+    rRecognition.lang = 'fr-FR'; rRecognition.continuous = true; rRecognition.interimResults = true;
+    rRecognition.onresult = (event) => {
+      const participant = participantById(activeParticipantId);
+      if (!participant) return;
+      let interimText = '';
+      for (let i = event.resultIndex; i < event.results.length; i++){
+        const res = event.results[i];
+        if (res.isFinal){
+          const text = res[0].transcript.trim();
+          if (text){
+            rSegments.push({ participant: participant.name, text });
+            window.audyoSession.reunion = rSegments;
+            if (rInterimBubble){ rInterimBubble.remove(); rInterimBubble = null; }
+            rTranscript.appendChild(rAddBubble(participant, text, false));
+            rSummaryBtn.disabled = rSegments.length === 0;
+            rTranscript.scrollTop = rTranscript.scrollHeight;
+          }
+        } else { interimText += res[0].transcript; }
+      }
+      if (interimText){
+        if (!rInterimBubble){ rInterimBubble = rAddBubble(participant, interimText, true); rTranscript.appendChild(rInterimBubble); }
+        else { rInterimBubble.innerHTML = '<span class="meta">' + escapeHtml(participant.name) + ' · en cours…</span>' + escapeHtml(interimText); }
+        rTranscript.scrollTop = rTranscript.scrollHeight;
+      }
+    };
+    rRecognition.onerror = (e) => { if (e.error !== 'no-speech') rHint.textContent = "Petit souci d'écoute — réessayez."; };
+    rRecognition.onend = () => { if (rListening){ try{ rRecognition.start(); }catch(e){} } };
+    rRecognition.start();
+    rListening = true; rMicBtn.classList.add('listening'); rHint.textContent = "Écoute en cours…";
+  }
+  function rStopListening(){
+    rListening = false;
+    if (rRecognition){ rRecognition.onend = null; rRecognition.stop(); }
+    rStopMeter();
+    if (rInterimBubble){ rInterimBubble.remove(); rInterimBubble = null; }
+    rMicBtn.classList.remove('listening');
+    rHint.textContent = "Touchez le nom de la personne qui parle, puis le micro.";
+  }
+  rMicBtn.addEventListener('click', () => rListening ? rStopListening() : rStartListening());
+
+  rCloseSummary.addEventListener('click', () => rSummaryPanel.classList.remove('open'));
+  rSummaryBtn.addEventListener('click', async () => {
+    if (rSegments.length === 0) return;
+    rSummaryPanel.classList.add('open');
+    rSummaryBody.innerHTML = '<p class="loading">Génération du compte-rendu…</p>';
+    try{
+      const response = await fetch(BACKEND_URL + '/v1/conversations/summary', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ segments: rSegments.map(s => ({ speaker: s.participant, text: s.text })) })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Erreur backend');
+      rSummaryBody.innerHTML = data.summary.split('\\n').filter(Boolean).map(l => '<p>'+escapeHtml(l)+'</p>').join('');
+    }catch(err){
+      rSummaryBody.innerHTML = '<p class="err">Le résumé n\'a pas pu être généré (' + escapeHtml(err.message || '') + '). Vérifiez que le backend tourne bien sur ' + BACKEND_URL + '.</p>';
+    }
+  });
+
+  // Coupe le micro si on quitte l'écran Réunion.
+  document.querySelectorAll('[data-goto], .tab').forEach(el => {
+    el.addEventListener('click', () => { if (rListening) rStopListening(); });
+  });
+
+  renderParticipants();
+})();
+
+// ==================== ÉCOUTE ASSISTÉE — AMPLIFICATION & ÉGALISEUR EN DIRECT ====================
+(function(){
+  const toggleBtn = document.getElementById('ampliToggleBtn');
+  const gainSlider = document.getElementById('sliderGain');
+  const bassSlider = document.getElementById('sliderBass');
+  const midSlider = document.getElementById('sliderMid');
+  const trebleSlider = document.getElementById('sliderTreble');
+  const valGain = document.getElementById('valGain');
+  const valBass = document.getElementById('valBass');
+  const valMid = document.getElementById('valMid');
+  const valTreble = document.getElementById('valTreble');
+  const eqBars = document.querySelectorAll('#eqBars .bar');
+
+  let audioCtx = null, micStream = null, sourceNode = null, gainNode = null;
+  let bassFilter = null, midFilter = null, trebleFilter = null, analyser = null;
+  let listening = false, rafId = null;
+
+  function updateLabels(){
+    valGain.textContent = gainSlider.value + '%';
+    valBass.textContent = (bassSlider.value > 0 ? '+' : '') + bassSlider.value + ' dB';
+    valMid.textContent = (midSlider.value > 0 ? '+' : '') + midSlider.value + ' dB';
+    valTreble.textContent = (trebleSlider.value > 0 ? '+' : '') + trebleSlider.value + ' dB';
+  }
+  [gainSlider, bassSlider, midSlider, trebleSlider].forEach(s => s.addEventListener('input', () => {
+    updateLabels();
+    if (!listening) return;
+    if (gainNode) gainNode.gain.value = gainSlider.value / 100;
+    if (bassFilter) bassFilter.gain.value = parseFloat(bassSlider.value);
+    if (midFilter) midFilter.gain.value = parseFloat(midSlider.value);
+    if (trebleFilter) trebleFilter.gain.value = parseFloat(trebleSlider.value);
+  }));
+  updateLabels();
+
+  function animateBars(){
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    function tick(){
+      analyser.getByteFrequencyData(data);
+      const step = Math.floor(data.length / eqBars.length);
+      eqBars.forEach((bar, i) => {
+        const v = data[i * step] || 0;
+        bar.style.height = Math.max(8, (v / 255) * 100) + '%';
+      });
+      rafId = requestAnimationFrame(tick);
+    }
+    tick();
+  }
+
+  async function startAmpli(){
+    try{ micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:false, noiseSuppression:false } }); }
+    catch(e){ toggleBtn.textContent = 'Accès micro refusé'; return; }
+
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    sourceNode = audioCtx.createMediaStreamSource(micStream);
+
+    gainNode = audioCtx.createGain();
+    gainNode.gain.value = gainSlider.value / 100;
+
+    bassFilter = audioCtx.createBiquadFilter();
+    bassFilter.type = 'lowshelf'; bassFilter.frequency.value = 250; bassFilter.gain.value = parseFloat(bassSlider.value);
+
+    midFilter = audioCtx.createBiquadFilter();
+    midFilter.type = 'peaking'; midFilter.frequency.value = 1500; midFilter.Q.value = 1; midFilter.gain.value = parseFloat(midSlider.value);
+
+    trebleFilter = audioCtx.createBiquadFilter();
+    trebleFilter.type = 'highshelf'; trebleFilter.frequency.value = 4000; trebleFilter.gain.value = parseFloat(trebleSlider.value);
+
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 64;
+
+    sourceNode.connect(gainNode);
+    gainNode.connect(bassFilter);
+    bassFilter.connect(midFilter);
+    midFilter.connect(trebleFilter);
+    trebleFilter.connect(analyser);
+    analyser.connect(audioCtx.destination);
+
+    listening = true;
+    toggleBtn.textContent = "⏹ Arrêter l'écoute amplifiée";
+    toggleBtn.classList.add('listening');
+    animateBars();
+  }
+
+  function stopAmpli(){
+    listening = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    if (micStream) micStream.getTracks().forEach(t => t.stop());
+    if (audioCtx) audioCtx.close();
+    eqBars.forEach(bar => bar.style.height = '8%');
+    toggleBtn.textContent = "🎧 Démarrer l'écoute amplifiée";
+    toggleBtn.classList.remove('listening');
+  }
+
+  toggleBtn.addEventListener('click', () => listening ? stopAmpli() : startAmpli());
+  window.audyoStopAmpli = stopAmpli;
+
+  document.querySelectorAll('[data-goto], .tab').forEach(el => {
+    el.addEventListener('click', () => { if (listening) stopAmpli(); });
+  });
+})();
+
+// ==================== ÉCOUTE ASSISTÉE — MODE SOUS-TITRES TV/RADIO ====================
+(function(){
+  const modeBtns = document.querySelectorAll('#ampliMode, #captionsMode');
+  const switchBtns = document.querySelectorAll('.screen[data-screen="ecoute"] [data-mode]');
+  const ampliMode = document.getElementById('ampliMode');
+  const captionsMode = document.getElementById('captionsMode');
+  const ccMicBtn = document.getElementById('ccMicBtn');
+  const bigCaptions = document.getElementById('bigCaptions');
+
+  switchBtns.forEach(btn => btn.addEventListener('click', () => {
+    switchBtns.forEach(b => b.classList.toggle('active', b === btn));
+    const isCaptions = btn.dataset.mode === 'captions';
+    ampliMode.style.display = isCaptions ? 'none' : 'block';
+    captionsMode.style.display = isCaptions ? 'flex' : 'none';
+    if (!isCaptions && ccListening) ccStopListening();
+    if (isCaptions && window.audyoStopAmpli) window.audyoStopAmpli();
+  }));
+
+  let ccListening = false, ccRecognition = null, ccMicStream = null;
+  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  async function ccStartListening(){
+    if (!SpeechRecognitionImpl){ bigCaptions.innerHTML = '<div class="cc-empty">Reconnaissance vocale indisponible ici — utilisez Chrome ou Edge.</div>'; return; }
+    try{ ccMicStream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
+    catch(e){ bigCaptions.innerHTML = '<div class="cc-empty">Accès micro refusé.</div>'; return; }
+    ccRecognition = new SpeechRecognitionImpl();
+    ccRecognition.lang = 'fr-FR'; ccRecognition.continuous = true; ccRecognition.interimResults = true;
+    ccRecognition.onresult = (event) => {
+      let text = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) text += event.results[i][0].transcript;
+      bigCaptions.innerHTML = '<div class="cc-text">' + escapeHtml(text) + '</div>';
+    };
+    ccRecognition.onerror = (e) => { if (e.error !== 'no-speech') console.warn(e.error); };
+    ccRecognition.onend = () => { if (ccListening){ try{ ccRecognition.start(); }catch(e){} } };
+    ccRecognition.start();
+    ccListening = true;
+    ccMicBtn.textContent = '⏹ Arrêter les sous-titres';
+  }
+  function ccStopListening(){
+    ccListening = false;
+    if (ccRecognition){ ccRecognition.onend = null; ccRecognition.stop(); }
+    if (ccMicStream) ccMicStream.getTracks().forEach(t => t.stop());
+    ccMicBtn.textContent = '🎙 Démarrer les sous-titres';
+  }
+  ccMicBtn.addEventListener('click', () => ccListening ? ccStopListening() : ccStartListening());
+
+  document.querySelectorAll('[data-goto], .tab').forEach(el => {
+    el.addEventListener('click', () => { if (ccListening) ccStopListening(); });
+  });
+})();
+
+// ==================== HISTORIQUE — RECHERCHE EN LANGAGE NATUREL ====================
+(function(){
+  const BACKEND_URL = 'https://audyo-backend.onrender.com';
+  const input = document.getElementById('histSearchInput');
+  const btn = document.getElementById('histSearchBtn');
+  const answerBox = document.getElementById('histSearchAnswer');
+
+  function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  async function runSearch(){
+    const query = input.value.trim();
+    if (!query) return;
+    const conv = (window.audyoSession && window.audyoSession.conversation) || [];
+    const reu = (window.audyoSession && window.audyoSession.reunion) || [];
+    if (conv.length === 0 && reu.length === 0){
+      answerBox.style.display = 'block';
+      answerBox.innerHTML = '<span class="lbl">Réponse</span>Aucune conversation ou réunion n\'a encore eu lieu dans cette session — parlez d\'abord dans Conversation ou Réunion, puis relancez la recherche.';
+      return;
+    }
+    answerBox.style.display = 'block';
+    answerBox.innerHTML = '<span class="lbl">Réponse</span>Recherche en cours…';
+    const transcriptText =
+      conv.map(s => 'Locuteur ' + (s.speaker+1) + ': ' + s.text).join('\\n') + '\\n' +
+      reu.map(s => s.participant + ': ' + s.text).join('\\n');
+    try{
+      const response = await fetch(BACKEND_URL + '/v1/search', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ query, transcript: transcriptText })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Erreur backend');
+      answerBox.innerHTML = '<span class="lbl">Réponse</span>' + escapeHtml(data.answer);
+    }catch(err){
+      answerBox.innerHTML = '<span class="lbl">Réponse</span>Recherche indisponible (' + escapeHtml(err.message || '') + '). Vérifiez que le backend tourne sur ' + BACKEND_URL + '.';
+    }
+  }
+  btn.addEventListener('click', runSearch);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
+})();
+
+// ==================== CARTE D'URGENCE / SOS ====================
+(function(){
+  const optBtns = document.querySelectorAll('.urgence-opt-btn');
+  const sosBtn = document.getElementById('sosBtn');
+  const sosStatus = document.getElementById('sosStatus');
+
+  optBtns.forEach(btn => btn.addEventListener('click', () => {
+    optBtns.forEach(b => b.classList.toggle('active', b === btn));
+  }));
+
+  sosBtn.addEventListener('click', () => {
+    sosStatus.style.display = 'block';
+    sosStatus.textContent = 'Alerte préparée pour Julie — envoi réel non branché dans ce prototype.';
+    sosBtn.textContent = '✓ Alerte prête';
+    setTimeout(() => { sosBtn.textContent = '🆘 Envoyer une alerte SOS'; sosStatus.style.display = 'none'; }, 4000);
+  });
+})();
+</script>
