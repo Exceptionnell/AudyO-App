@@ -45,7 +45,13 @@
   background:radial-gradient(circle, rgba(255,138,91,0.30) 0%, rgba(232,93,138,0.10) 45%, transparent 72%); filter:blur(1px); pointer-events:none; }
 .mic-wrap{ position:relative; width:88px; height:88px; display:flex; align-items:center; justify-content:center; }
 .ring{ position:absolute; inset:0; border-radius:50%; border:1.5px solid rgba(255,181,98,.45); opacity:0; transition:opacity .2s ease; pointer-events:none; }
-.ring.on{ opacity:1; }
+.ring.on{ opacity:1; animation:audyoPulse 1.6s ease-in-out infinite; }
+.ring.on:nth-child(2){ animation-delay:.4s; }
+@keyframes audyoPulse{
+  0%{ transform:scale(0.85); opacity:.75; }
+  70%{ transform:scale(1.25); opacity:0; }
+  100%{ transform:scale(1.25); opacity:0; }
+}
 .mic-btn{ position:relative; z-index:2; width:60px; height:60px; border-radius:50%; border:none; background:var(--panel-raised); color:var(--ink); font-size:20px; cursor:pointer; transition:background .2s ease, box-shadow .2s ease; }
 .mic-btn.listening{ background:var(--grad); color:var(--grad-ink); box-shadow:0 8px 26px -6px rgba(255,138,91,.6); }
 .mic-btn-sm{ width:52px; height:52px; font-size:18px; }
@@ -593,7 +599,7 @@
   const convModeNote = document.getElementById('convModeNote');
 
   let currentSpeaker = 0, listening = false, recognition = null, interimBubble = null;
-  let segments = [], audioCtx, analyser, micStream, rafId;
+  let segments = [];
   let convMode = 'standard';
   const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -621,38 +627,18 @@
   }
   function scrollToBottom(){ transcriptEl.scrollTop = transcriptEl.scrollHeight; }
 
-  function startAudioMeter(stream){
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const source = audioCtx.createMediaStreamSource(stream);
-    analyser = audioCtx.createAnalyser(); analyser.fftSize = 512;
-    source.connect(analyser);
-    const data = new Uint8Array(analyser.frequencyBinCount);
-    function tick(){
-      analyser.getByteFrequencyData(data);
-      let sum = 0; for (let i=0;i<data.length;i++) sum += data[i];
-      const level = Math.min(1, (sum/data.length)/60);
-      ring1.style.transform = 'scale(' + (1+level*0.55).toFixed(3) + ')';
-      ring2.style.transform = 'scale(' + (1+level*0.9).toFixed(3) + ')';
-      ring1.style.opacity = 0.5+level*0.5; ring2.style.opacity = Math.max(0,0.35-level*0.1);
-      rafId = requestAnimationFrame(tick);
-    }
-    tick();
-  }
-  function stopAudioMeter(){
-    if (rafId) cancelAnimationFrame(rafId);
-    if (audioCtx) audioCtx.close();
-    ring1.style.transform='scale(1)'; ring1.style.opacity=0;
-    ring2.style.transform='scale(1)'; ring2.style.opacity=0;
-    if (micStream) micStream.getTracks().forEach(t => t.stop());
-  }
+  // Anneaux en pulsation CSS pure (pas de flux audio propre) : la reconnaissance
+  // vocale garde un accès exclusif au micro — capter le micro deux fois en même
+  // temps (analyse + reconnaissance) empêche la reconnaissance de recevoir du son
+  // sur Android (bug Chromium documenté).
+  function startPulse(){ ring1.classList.add('on'); ring2.classList.add('on'); }
+  function stopPulse(){ ring1.classList.remove('on'); ring2.classList.remove('on'); }
 
   async function startListening(){
     if (!SpeechRecognitionImpl){ hint.textContent = "Reconnaissance vocale indisponible ici — utilisez Chrome ou Edge."; return; }
-    try{ micStream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
-    catch(e){ hint.textContent = "Accès micro refusé."; return; }
-    startAudioMeter(micStream);
+    startPulse();
     recognition = new SpeechRecognitionImpl();
-    recognition.lang = 'fr-FR'; recognition.continuous = true; recognition.interimResults = true;
+    recognition.lang = 'fr-FR'; recognition.continuous = false; recognition.interimResults = true;
     recognition.onresult = (event) => {
       let interimText = '';
       for (let i = event.resultIndex; i < event.results.length; i++){
@@ -675,7 +661,10 @@
         scrollToBottom();
       }
     };
-    recognition.onerror = (e) => { if (e.error !== 'no-speech') hint.textContent = "Petit souci d'écoute — réessayez."; };
+    recognition.onerror = (e) => {
+      if (e.error === 'not-allowed'){ hint.textContent = "Accès micro refusé."; listening = false; micBtn.classList.remove('listening'); stopPulse(); return; }
+      if (e.error !== 'no-speech') hint.textContent = "Petit souci d'écoute — réessayez.";
+    };
     recognition.onend = () => { if (listening){ try{ recognition.start(); }catch(e){} } };
     recognition.start();
     listening = true; micBtn.classList.add('listening'); hint.textContent = "Écoute en cours…";
@@ -683,7 +672,7 @@
   function stopListening(){
     listening = false;
     if (recognition){ recognition.onend = null; recognition.stop(); }
-    stopAudioMeter();
+    stopPulse();
     if (interimBubble){ interimBubble.remove(); interimBubble = null; }
     micBtn.classList.remove('listening');
     hint.textContent = segments.length ? "Écoute en pause." : "Posez le téléphone sur la table et appuyez sur le micro.";
@@ -758,37 +747,18 @@
     const a = sourceSel.value; sourceSel.value = targetSel.value; targetSel.value = a;
   });
 
-  let tListening = false, tRecognition = null, tMicStream = null, tAudioCtx = null, tAnalyser = null, tRaf = null;
+  let tListening = false, tRecognition = null;
   const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
   function langLabel(code){ const l = LANGUAGES.find(x => x.code === code); return l ? l.label : code; }
 
-  function tStartMeter(stream){
-    tAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const source = tAudioCtx.createMediaStreamSource(stream);
-    tAnalyser = tAudioCtx.createAnalyser(); tAnalyser.fftSize = 512;
-    source.connect(tAnalyser);
-    const data = new Uint8Array(tAnalyser.frequencyBinCount);
-    function tick(){
-      tAnalyser.getByteFrequencyData(data);
-      let sum = 0; for (let i=0;i<data.length;i++) sum += data[i];
-      const level = Math.min(1, (sum/data.length)/60);
-      tRing1.style.transform = 'scale(' + (1+level*0.55).toFixed(3) + ')';
-      tRing2.style.transform = 'scale(' + (1+level*0.9).toFixed(3) + ')';
-      tRing1.style.opacity = 0.5+level*0.5; tRing2.style.opacity = Math.max(0,0.35-level*0.1);
-      tRaf = requestAnimationFrame(tick);
-    }
-    tick();
-  }
-  function tStopMeter(){
-    if (tRaf) cancelAnimationFrame(tRaf);
-    if (tAudioCtx) tAudioCtx.close();
-    tRing1.style.transform='scale(1)'; tRing1.style.opacity=0;
-    tRing2.style.transform='scale(1)'; tRing2.style.opacity=0;
-    if (tMicStream) tMicStream.getTracks().forEach(t => t.stop());
-  }
+  // Anneaux en pulsation CSS pure — voir note du module Conversation : capter le
+  // micro deux fois en même temps (analyse + reconnaissance) bloque la
+  // reconnaissance vocale sur Android.
+  function tStartPulse(){ tRing1.classList.add('on'); tRing2.classList.add('on'); }
+  function tStopPulse(){ tRing1.classList.remove('on'); tRing2.classList.remove('on'); }
 
   // URL du backend AudyO — modifiez cette valeur si votre serveur tourne ailleurs.
   const BACKEND_URL = 'https://audyo-backend.onrender.com';
@@ -839,13 +809,11 @@
 
   async function tStartListening(){
     if (!SpeechRecognitionImpl){ tHint.textContent = "Reconnaissance vocale indisponible ici — utilisez Chrome ou Edge."; return; }
-    try{ tMicStream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
-    catch(e){ tHint.textContent = "Accès micro refusé."; return; }
-    tStartMeter(tMicStream);
+    tStartPulse();
 
     tRecognition = new SpeechRecognitionImpl();
     tRecognition.lang = sourceSel.value;
-    tRecognition.continuous = true;
+    tRecognition.continuous = false;
     tRecognition.interimResults = false;
 
     tRecognition.onresult = (event) => {
@@ -857,7 +825,10 @@
         }
       }
     };
-    tRecognition.onerror = (e) => { if (e.error !== 'no-speech') tHint.textContent = "Petit souci d'écoute — réessayez."; };
+    tRecognition.onerror = (e) => {
+      if (e.error === 'not-allowed'){ tHint.textContent = "Accès micro refusé."; tListening = false; tMicBtn.classList.remove('listening'); tStopPulse(); return; }
+      if (e.error !== 'no-speech') tHint.textContent = "Petit souci d'écoute — réessayez.";
+    };
     tRecognition.onend = () => { if (tListening){ try{ tRecognition.start(); }catch(e){} } };
 
     tRecognition.start();
@@ -866,7 +837,7 @@
   function tStopListening(){
     tListening = false;
     if (tRecognition){ tRecognition.onend = null; tRecognition.stop(); }
-    tStopMeter();
+    tStopPulse();
     tMicBtn.classList.remove('listening');
     tHint.textContent = "Choisissez vos langues, puis appuyez sur le micro.";
   }
@@ -1035,7 +1006,7 @@
   });
 
   // ---- Micro et transcription (même mécanique que Conversation, avec N participants nommés) ----
-  let rListening = false, rRecognition = null, rMicStream = null, rAudioCtx = null, rAnalyser = null, rRaf = null, rInterimBubble = null;
+  let rListening = false, rRecognition = null, rInterimBubble = null;
   const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   function rAddBubble(participant, text, isInterim){
@@ -1049,38 +1020,15 @@
     return b;
   }
 
-  function rStartMeter(stream){
-    rAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const source = rAudioCtx.createMediaStreamSource(stream);
-    rAnalyser = rAudioCtx.createAnalyser(); rAnalyser.fftSize = 512;
-    source.connect(rAnalyser);
-    const data = new Uint8Array(rAnalyser.frequencyBinCount);
-    function tick(){
-      rAnalyser.getByteFrequencyData(data);
-      let sum = 0; for (let i=0;i<data.length;i++) sum += data[i];
-      const level = Math.min(1, (sum/data.length)/60);
-      rRing1.style.transform = 'scale(' + (1+level*0.55).toFixed(3) + ')';
-      rRing2.style.transform = 'scale(' + (1+level*0.9).toFixed(3) + ')';
-      rRing1.style.opacity = 0.5+level*0.5; rRing2.style.opacity = Math.max(0,0.35-level*0.1);
-      rRaf = requestAnimationFrame(tick);
-    }
-    tick();
-  }
-  function rStopMeter(){
-    if (rRaf) cancelAnimationFrame(rRaf);
-    if (rAudioCtx) rAudioCtx.close();
-    rRing1.style.transform='scale(1)'; rRing1.style.opacity=0;
-    rRing2.style.transform='scale(1)'; rRing2.style.opacity=0;
-    if (rMicStream) rMicStream.getTracks().forEach(t => t.stop());
-  }
+  // Anneaux en pulsation CSS pure — même correctif que Conversation/Traduction.
+  function rStartPulse(){ rRing1.classList.add('on'); rRing2.classList.add('on'); }
+  function rStopPulse(){ rRing1.classList.remove('on'); rRing2.classList.remove('on'); }
 
   async function rStartListening(){
     if (!SpeechRecognitionImpl){ rHint.textContent = "Reconnaissance vocale indisponible ici — utilisez Chrome ou Edge."; return; }
-    try{ rMicStream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
-    catch(e){ rHint.textContent = "Accès micro refusé."; return; }
-    rStartMeter(rMicStream);
+    rStartPulse();
     rRecognition = new SpeechRecognitionImpl();
-    rRecognition.lang = 'fr-FR'; rRecognition.continuous = true; rRecognition.interimResults = true;
+    rRecognition.lang = 'fr-FR'; rRecognition.continuous = false; rRecognition.interimResults = true;
     rRecognition.onresult = (event) => {
       const participant = participantById(activeParticipantId);
       if (!participant) return;
@@ -1105,7 +1053,10 @@
         rTranscript.scrollTop = rTranscript.scrollHeight;
       }
     };
-    rRecognition.onerror = (e) => { if (e.error !== 'no-speech') rHint.textContent = "Petit souci d'écoute — réessayez."; };
+    rRecognition.onerror = (e) => {
+      if (e.error === 'not-allowed'){ rHint.textContent = "Accès micro refusé."; rListening = false; rMicBtn.classList.remove('listening'); rStopPulse(); return; }
+      if (e.error !== 'no-speech') rHint.textContent = "Petit souci d'écoute — réessayez.";
+    };
     rRecognition.onend = () => { if (rListening){ try{ rRecognition.start(); }catch(e){} } };
     rRecognition.start();
     rListening = true; rMicBtn.classList.add('listening'); rHint.textContent = "Écoute en cours…";
@@ -1113,7 +1064,7 @@
   function rStopListening(){
     rListening = false;
     if (rRecognition){ rRecognition.onend = null; rRecognition.stop(); }
-    rStopMeter();
+    rStopPulse();
     if (rInterimBubble){ rInterimBubble.remove(); rInterimBubble = null; }
     rMicBtn.classList.remove('listening');
     rHint.textContent = "Touchez le nom de la personne qui parle, puis le micro.";
@@ -1264,23 +1215,24 @@
     if (isCaptions && window.audyoStopAmpli) window.audyoStopAmpli();
   }));
 
-  let ccListening = false, ccRecognition = null, ccMicStream = null;
+  let ccListening = false, ccRecognition = null;
   const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-  async function ccStartListening(){
+  function ccStartListening(){
     if (!SpeechRecognitionImpl){ bigCaptions.innerHTML = '<div class="cc-empty">Reconnaissance vocale indisponible ici — utilisez Chrome ou Edge.</div>'; return; }
-    try{ ccMicStream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
-    catch(e){ bigCaptions.innerHTML = '<div class="cc-empty">Accès micro refusé.</div>'; return; }
     ccRecognition = new SpeechRecognitionImpl();
-    ccRecognition.lang = 'fr-FR'; ccRecognition.continuous = true; ccRecognition.interimResults = true;
+    ccRecognition.lang = 'fr-FR'; ccRecognition.continuous = false; ccRecognition.interimResults = true;
     ccRecognition.onresult = (event) => {
       let text = '';
       for (let i = event.resultIndex; i < event.results.length; i++) text += event.results[i][0].transcript;
       bigCaptions.innerHTML = '<div class="cc-text">' + escapeHtml(text) + '</div>';
     };
-    ccRecognition.onerror = (e) => { if (e.error !== 'no-speech') console.warn(e.error); };
+    ccRecognition.onerror = (e) => {
+      if (e.error === 'not-allowed'){ bigCaptions.innerHTML = '<div class="cc-empty">Accès micro refusé.</div>'; ccListening = false; ccMicBtn.textContent = '🎙 Démarrer les sous-titres'; return; }
+      if (e.error !== 'no-speech') console.warn(e.error);
+    };
     ccRecognition.onend = () => { if (ccListening){ try{ ccRecognition.start(); }catch(e){} } };
     ccRecognition.start();
     ccListening = true;
@@ -1289,7 +1241,6 @@
   function ccStopListening(){
     ccListening = false;
     if (ccRecognition){ ccRecognition.onend = null; ccRecognition.stop(); }
-    if (ccMicStream) ccMicStream.getTracks().forEach(t => t.stop());
     ccMicBtn.textContent = '🎙 Démarrer les sous-titres';
   }
   ccMicBtn.addEventListener('click', () => ccListening ? ccStopListening() : ccStartListening());
