@@ -253,16 +253,17 @@ html, body{ margin:0; padding:0; }
 .launch-logo-lockup{ display:flex; align-items:center; gap:4px; }
 .launch-word{ font-size:52px; font-weight:800; color:var(--ink); letter-spacing:-0.01em; font-family:'Plus Jakarta Sans',sans-serif; }
 .launch-o-wrap{ position:relative; width:62px; height:62px; display:flex; align-items:center; justify-content:center; }
-.launch-ripple{ position:absolute; top:50%; left:50%; width:46px; height:46px; margin-top:-23px; margin-left:-23px;
-  border-radius:50%; border:2.5px solid var(--coral); opacity:0; animation:launchRipple 2.4s ease-out infinite; z-index:1; }
-.launch-ripple.r2{ animation-delay:.8s; border-color:var(--amber); }
-.launch-ripple.r3{ animation-delay:1.6s; border-color:var(--rose); }
-@keyframes launchRipple{
-  0%{ transform:scale(1); opacity:.9; }
-  100%{ transform:scale(2.3); opacity:0; }
-}
 .launch-badge{ position:relative; z-index:2; width:46px; height:46px; border-radius:50%; background:var(--grad);
   display:flex; align-items:center; justify-content:center; box-shadow:0 10px 30px -8px rgba(255,138,91,.55); }
+.launch-badge::before, .launch-badge::after{
+  content:''; position:absolute; top:0; left:0; right:0; bottom:0; border-radius:50%;
+  border:2.5px solid var(--coral); opacity:0; animation:launchRipple 2s ease-out infinite;
+}
+.launch-badge::after{ animation-delay:.9s; border-color:var(--rose); }
+@keyframes launchRipple{
+  0%{ transform:scale(1); opacity:.85; }
+  100%{ transform:scale(2.4); opacity:0; }
+}
 .launch-badge svg{ width:26px; height:26px; overflow:visible; }
 .launch-badge .wave{ animation:launchWaveBeat 1.4s ease-in-out infinite; transform-box:fill-box; transform-origin:0% 50%; }
 .launch-badge .wave.w2{ animation-delay:.2s; }
@@ -287,9 +288,6 @@ html, body{ margin:0; padding:0; }
       <div class="launch-logo-lockup">
         <span class="launch-word">Audy</span>
         <div class="launch-o-wrap">
-          <div class="launch-ripple r1"></div>
-          <div class="launch-ripple r2"></div>
-          <div class="launch-ripple r3"></div>
           <div class="launch-badge">
             <svg viewBox="0 0 90 90">
               <circle cx="30" cy="45" r="6" fill="#FBF3EC"/>
