@@ -1,0 +1,129 @@
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+:root{
+  --bg:#211A24; --panel:#2B222F; --panel-raised:#362B3B; --line:rgba(243,236,230,0.10);
+  --ink:#F3ECE6; --muted:#B8A9B0;
+  --coral:#FF8A5B; --amber:#FFB562; --rose:#E85D8A; --sage:#8FC3B5;
+  --grad: linear-gradient(135deg, #FF8A5B 0%, #FFB562 48%, #E85D8A 100%);
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+.splash-root{ font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); border-radius:20px; overflow:hidden; position:relative; height:100vh; min-height:640px; }
+
+/* ---- Écran 1 : logo animé, toute la surface cliquable ---- */
+.splash-screen{
+  position:absolute; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  cursor:pointer; transition:opacity .4s ease, transform .4s ease; user-select:none;
+}
+.splash-screen.hidden{ opacity:0; transform:scale(1.04); pointer-events:none; }
+
+.logo-lockup{ display:flex; align-items:center; gap:4px; }
+.logo-word{ font-size:64px; font-weight:800; color:var(--ink); letter-spacing:-0.01em; }
+
+.o-wrap{ position:relative; width:74px; height:74px; display:flex; align-items:center; justify-content:center; }
+.o-ripple{ position:absolute; border-radius:50%; border:2px solid var(--coral); opacity:0; animation:oRipple 2.4s ease-out infinite; }
+.o-ripple.r2{ animation-delay:.8s; border-color:var(--amber); }
+.o-ripple.r3{ animation-delay:1.6s; border-color:var(--rose); }
+@keyframes oRipple{
+  0%{ width:56px; height:56px; opacity:.9; }
+  100%{ width:110px; height:110px; opacity:0; }
+}
+.o-badge{ position:relative; z-index:2; width:56px; height:56px; border-radius:50%; background:var(--grad);
+  display:flex; align-items:center; justify-content:center; box-shadow:0 10px 30px -8px rgba(255,138,91,.55); }
+.o-badge svg{ width:30px; height:30px; }
+.o-badge .wave{ animation:waveBeat 1.8s ease-in-out infinite; transform-origin:20% 50%; }
+.o-badge .wave.w2{ animation-delay:.15s; }
+@keyframes waveBeat{
+  0%,100%{ opacity:.55; transform:scaleX(0.85); }
+  50%{ opacity:1; transform:scaleX(1); }
+}
+
+.subtitle{ margin-top:26px; font-size:11px; font-weight:800; letter-spacing:.22em; color:var(--muted); text-transform:uppercase; }
+.tap-hint{ position:absolute; bottom:56px; font-size:11px; color:var(--muted); opacity:.55; letter-spacing:.04em; }
+.tap-hint::before{ content:'— '; }
+.tap-hint::after{ content:' —'; }
+
+/* ---- Écran 2 : fonctionnalités (révélées au toucher) ---- */
+.features-screen{
+  position:absolute; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column; padding:40px 24px; opacity:0; pointer-events:none;
+  transition:opacity .4s ease .1s;
+}
+.features-screen.visible{ opacity:1; pointer-events:auto; }
+.features-header{ text-align:center; margin-bottom:8px; }
+.features-header .word{ font-size:26px; font-weight:800; color:var(--ink); }
+.features-header .word .o-mini{ display:inline-block; width:16px; height:16px; border-radius:50%; background:var(--grad); vertical-align:middle; margin-left:2px; }
+.features-header .sub{ font-size:10px; font-weight:700; letter-spacing:.18em; color:var(--muted); text-transform:uppercase; margin-top:6px; }
+
+.feat-grid{ flex:1; display:grid; grid-template-columns:1fr 1fr; gap:14px; align-content:center; max-width:420px; margin:0 auto; width:100%; }
+.feat-card{ background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:22px 16px; text-align:left; cursor:pointer; }
+.feat-card .fic{ font-size:26px; margin-bottom:10px; }
+.feat-card .ft{ font-size:14px; font-weight:700; color:var(--ink); margin-bottom:4px; }
+.feat-card .fd{ font-size:11px; color:var(--muted); line-height:1.4; }
+
+.back-hint{ text-align:center; font-size:11px; color:var(--muted); opacity:.6; margin-top:18px; cursor:pointer; }
+
+@media (max-width:420px){
+  .logo-word{ font-size:48px; }
+  .o-wrap{ width:58px; height:58px; }
+  .o-badge{ width:44px; height:44px; }
+  .o-badge svg{ width:24px; height:24px; }
+}
+</style>
+
+<div class="splash-root">
+
+  <!-- ÉCRAN 1 : logo animé -->
+  <div class="splash-screen" id="splashScreen">
+    <div class="logo-lockup">
+      <span class="logo-word">Audy</span>
+      <div class="o-wrap">
+        <div class="o-ripple r1"></div>
+        <div class="o-ripple r2"></div>
+        <div class="o-ripple r3"></div>
+        <div class="o-badge">
+          <svg viewBox="0 0 90 90">
+            <circle cx="30" cy="45" r="6" fill="#FBF3EC"/>
+            <path class="wave w1" d="M 42 33 A 17 17 0 0 1 42 57" stroke="#FBF3EC" stroke-width="5" fill="none" stroke-linecap="round"/>
+            <path class="wave w2" d="M 51 24 A 29 29 0 0 1 51 66" stroke="#FBF3EC" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.85"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+    <div class="subtitle">Assistant de communication</div>
+    <div class="tap-hint">touchez l'écran pour continuer</div>
+  </div>
+
+  <!-- ÉCRAN 2 : fonctionnalités -->
+  <div class="features-screen" id="featuresScreen">
+    <div class="features-header">
+      <span class="word">Audy<span class="o-mini"></span></span>
+      <div class="sub">Choisissez un module</div>
+    </div>
+    <div class="feat-grid">
+      <div class="feat-card"><div class="fic">💬</div><div class="ft">Conversation</div><div class="fd">Transcription en direct</div></div>
+      <div class="feat-card"><div class="fic">🔊</div><div class="ft">Écoute assistée</div><div class="fd">Amplification & clarté</div></div>
+      <div class="feat-card"><div class="fic">🌐</div><div class="ft">Traduction</div><div class="fd">Échange bilingue</div></div>
+      <div class="feat-card"><div class="fic">📋</div><div class="ft">Réunion</div><div class="fd">Multi-participants</div></div>
+    </div>
+    <div class="back-hint" id="backHint">‹ Revenir à l'écran d'accueil</div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  const splash = document.getElementById('splashScreen');
+  const features = document.getElementById('featuresScreen');
+  const backHint = document.getElementById('backHint');
+
+  splash.addEventListener('click', () => {
+    splash.classList.add('hidden');
+    features.classList.add('visible');
+  });
+
+  backHint.addEventListener('click', (e) => {
+    e.stopPropagation();
+    features.classList.remove('visible');
+    splash.classList.remove('hidden');
+  });
+})();
+</script>
