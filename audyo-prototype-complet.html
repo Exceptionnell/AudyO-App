@@ -917,6 +917,8 @@ html, body{ margin:0; padding:0; }
     window.speechSynthesis.speak(utter);
   }
 
+  let tHistoryLog = [];
+
   async function addTranslationRow(originalText){
     if (tEmptyState && tEmptyState.parentNode) tEmptyState.remove();
     const row = document.createElement('div');
@@ -935,12 +937,25 @@ html, body{ margin:0; padding:0; }
       tgt.innerHTML = '<span class="txt">' + escapeHtml(translated) + '</span><button class="speak-btn" title="Écouter">🔊</button>';
       tgt.querySelector('.speak-btn').addEventListener('click', () => speak(translated, tgtLang));
       speak(translated, tgtLang); // lecture automatique de la traduction
+      tHistoryLog.push({ source: originalText, target: translated, sourceLang: langLabel(sourceSel.value), targetLang: langLabel(tgtLang) });
     }catch(e){
       const tgt = row.querySelector('.tgt');
       tgt.classList.remove('loading');
       tgt.innerHTML = '<span class="txt" style="color:var(--danger)">Échec — vérifiez que le backend tourne sur ' + escapeHtml(BACKEND_URL) + '.</span>';
     }
     transList.scrollTop = transList.scrollHeight;
+  }
+
+  function saveTranslationSession(){
+    if (tHistoryLog.length === 0) return;
+    const summary = tHistoryLog.map(function(l){ return l.sourceLang + ' → ' + l.targetLang + String.fromCharCode(10) + l.source + String.fromCharCode(10) + '↳ ' + l.target; }).join(String.fromCharCode(10) + String.fromCharCode(10));
+    window.audyoSaveToHistory({
+      kind: 'traduction',
+      title: 'Traduction ' + tHistoryLog[0].sourceLang + ' → ' + tHistoryLog[0].targetLang + ' · ' + new Date().toLocaleDateString('fr-FR', { day:'2-digit', month:'short' }),
+      transcript: tHistoryLog,
+      summary: summary,
+    });
+    tHistoryLog = [];
   }
 
   async function tStartListening(){
@@ -981,15 +996,17 @@ html, body{ margin:0; padding:0; }
   tMicBtn.addEventListener('click', () => tListening ? tStopListening() : tStartListening());
   sourceSel.addEventListener('change', () => { if (tListening) tStopListening(); });
   tResetBtn.addEventListener('click', () => {
+    saveTranslationSession();
     transList.innerHTML = '';
     const es = document.createElement('div'); es.className='empty-state'; es.id='tEmptyState';
     es.innerHTML = '<b>Aucune traduction en cours.</b><br>Parlez dans la langue source, la traduction apparaîtra à droite.';
     transList.appendChild(es);
   });
 
-  // Coupe le micro de traduction si on quitte l'écran via l'accueil / la barre basse.
+  // Coupe le micro de traduction si on quitte l'écran via l'accueil / la barre basse,
+  // et sauvegarde la session dans l'historique persistant au passage.
   document.querySelectorAll('[data-goto], .tab').forEach(el => {
-    el.addEventListener('click', () => { if (tListening) tStopListening(); });
+    el.addEventListener('click', () => { if (tListening) tStopListening(); saveTranslationSession(); });
   });
 })();
 
