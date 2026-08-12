@@ -75,6 +75,8 @@ html, body{ margin:0; padding:0; }
 .spk{ border:1px solid var(--line); background:var(--panel); border-radius:20px; padding:5px 13px; font-size:12px; font-weight:600; color:var(--ink-soft); cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; }
 .spk.active[data-spk="0"]{ background:var(--spk-a-bg); color:var(--spk-a); border-color:transparent; }
 .spk.active[data-spk="1"]{ background:var(--spk-b-bg); color:var(--spk-b); border-color:transparent; }
+.spk.active[data-tlang="A"]{ background:var(--spk-a-bg); color:var(--spk-a); border-color:transparent; }
+.spk.active[data-tlang="B"]{ background:var(--spk-b-bg); color:var(--spk-b); border-color:transparent; }
 .diarization-note{ text-align:center; font-size:10px; color:var(--ink-soft); opacity:.75; padding:0 24px 8px; line-height:1.4; }
 .transcript{ flex:1; overflow-y:auto; padding:4px 16px 8px; display:flex; flex-direction:column; gap:8px; }
 .bubble{ max-width:82%; padding:8px 11px; border-radius:14px; font-size:13px; line-height:1.4; }
@@ -427,12 +429,18 @@ html, body{ margin:0; padding:0; }
           <select id="tTargetLang" class="lang-select"></select>
         </div>
 
+        <div class="speaker-row" id="tSpeakerRow">
+          <button class="spk active" data-tlang="A">—</button>
+          <button class="spk" data-tlang="B">—</button>
+        </div>
+        <div class="diarization-note">Mode mains-libres : la langue parlée est détectée automatiquement (analyse audio + IA), sans rien toucher entre les tours de parole.</div>
+
         <div class="mic-zone" style="padding:10px 0 8px;">
           <div class="mic-wrap" style="width:72px; height:72px;">
             <div class="ring" id="tRing1"></div><div class="ring" id="tRing2"></div>
             <button id="tMicBtn" class="mic-btn mic-btn-sm">🎙</button>
           </div>
-          <div class="hint" id="tHint">Choisissez les deux langues de la conversation, puis appuyez sur le micro — chacun peut parler dans sa langue, sans ordre imposé.</div>
+          <div class="hint" id="tHint">Choisissez vos deux langues, puis appuyez sur le micro — plus besoin de rien toucher ensuite.</div>
         </div>
 
         <div class="trans-list" id="transList">
@@ -849,7 +857,7 @@ html, body{ margin:0; padding:0; }
   });
 })();
 
-// ==================== MODULE TRADUCTION ====================
+// ==================== MODULE TRADUCTION (mains-libres, détection auto) ====================
 (function(){
   const LANGUAGES = [
     { code:'fr-FR', label:'Français' },
@@ -872,6 +880,9 @@ html, body{ margin:0; padding:0; }
   const transList = document.getElementById('transList');
   const tEmptyState = document.getElementById('tEmptyState');
   const tResetBtn = document.getElementById('tResetBtn');
+  const speakerRow = document.getElementById('tSpeakerRow');
+  const speakerBtnA = speakerRow.querySelector('[data-tlang="A"]');
+  const speakerBtnB = speakerRow.querySelector('[data-tlang="B"]');
 
   LANGUAGES.forEach(l => {
     const o1 = document.createElement('option'); o1.value = l.code; o1.textContent = l.label;
@@ -881,128 +892,210 @@ html, body{ margin:0; padding:0; }
   sourceSel.value = 'fr-FR';
   targetSel.value = 'en-US';
 
-  swapBtn.addEventListener('click', () => {
-    const a = sourceSel.value; sourceSel.value = targetSel.value; targetSel.value = a;
-  });
-
-  let tListening = false, tRecognition = null;
-  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
-
   function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
   function langLabel(code){ const l = LANGUAGES.find(x => x.code === code); return l ? l.label : code; }
 
-  // Anneaux en pulsation CSS pure — voir note du module Conversation : capter le
-  // micro deux fois en même temps (analyse + reconnaissance) bloque la
-  // reconnaissance vocale sur Android.
-  function tStartPulse(){ tRing1.classList.add('on'); tRing2.classList.add('on'); }
-  function tStopPulse(){ tRing1.classList.remove('on'); tRing2.classList.remove('on'); }
+  // Les deux boutons deviennent de simples indicateurs (qui a parlé en
+  // dernier), pas des boutons à toucher — la langue est détectée
+  // automatiquement depuis l'audio par le backend (AssemblyAI + IA).
+  function refreshSpeakerLabels(activeCode){
+    speakerBtnA.textContent = langLabel(sourceSel.value);
+    speakerBtnB.textContent = langLabel(targetSel.value);
+    speakerBtnA.classList.toggle('active', activeCode === sourceSel.value);
+    speakerBtnB.classList.toggle('active', activeCode === targetSel.value);
+  }
+  refreshSpeakerLabels(null);
+  speakerBtnA.style.pointerEvents = 'none';
+  speakerBtnB.style.pointerEvents = 'none';
+
+  swapBtn.addEventListener('click', () => {
+    const a = sourceSel.value; sourceSel.value = targetSel.value; targetSel.value = a;
+    refreshSpeakerLabels(null);
+  });
+  sourceSel.addEventListener('change', () => { if (tListening) tStopListening(); refreshSpeakerLabels(null); });
+  targetSel.addEventListener('change', () => { if (tListening) tStopListening(); refreshSpeakerLabels(null); });
 
   // URL du backend AudyO — modifiez cette valeur si votre serveur tourne ailleurs.
   const BACKEND_URL = 'https://audyo-backend.onrender.com';
 
-  async function translateText(text){
-    const response = await fetch(BACKEND_URL + '/v1/translate', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ text, langA: sourceSel.value, langB: targetSel.value })
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Erreur backend');
-    return data; // { translation, detectedLang, detectedLabel }
-  }
+  let tListening = false, tSpeaking = false;
+  let tAudioCtx = null, tAnalyser = null, tMicStream = null, tSourceNode = null;
+  let tMediaRecorder = null, tChunks = [];
+  let tVadState = 'idle'; // idle | recording
+  let tLastLoudTime = 0, tRecordStart = 0, tVadRaf = null;
 
-  let tSpeaking = false;
+  const SPEECH_LEVEL_THRESHOLD = 18;   // seuil de niveau sonore (0-255) considéré comme "quelqu'un parle"
+  const SILENCE_TO_STOP_MS = 1100;     // silence continu avant de considérer la phrase terminée
+  const MIN_RECORDING_MS = 450;        // ignore les bruits trop courts (clics, souffle)
+  const MAX_RECORDING_MS = 14000;      // filet de sécurité si quelqu'un parle très longtemps
 
-  function speak(text, langCode){
-    if (!window.speechSynthesis){
-      // Pas de synthèse vocale disponible : rien à mettre en pause, l'écoute continue normalement.
+  function tStartPulse(){ tRing1.classList.add('on'); tRing2.classList.add('on'); }
+  function tStopPulse(){ tRing1.classList.remove('on'); tRing2.classList.remove('on'); }
+
+  async function tStartListening(){
+    try{
+      tMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    }catch(e){
+      tHint.textContent = "Accès micro refusé.";
       return;
     }
-    // On coupe la reconnaissance avant de parler, pour que le micro n'entende pas
-    // la voix de synthèse et ne la retraduise pas en boucle (effet "monologue").
-    tSpeaking = true;
-    if (tRecognition){ try{ tRecognition.onend = null; tRecognition.stop(); }catch(e){} }
+    tAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    tSourceNode = tAudioCtx.createMediaStreamSource(tMicStream);
+    tAnalyser = tAudioCtx.createAnalyser();
+    tAnalyser.fftSize = 512;
+    tSourceNode.connect(tAnalyser);
 
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = langCode;
-    utter.onend = () => { tSpeaking = false; tResumeListeningIfNeeded(); };
-    utter.onerror = () => { tSpeaking = false; tResumeListeningIfNeeded(); };
-    window.speechSynthesis.speak(utter);
+    tListening = true;
+    tMicBtn.classList.add('listening');
+    tHint.textContent = "Écoute mains-libres — parlez, l'app détecte la langue toute seule.";
+    tVadState = 'idle';
+    tVadLoop();
   }
 
-  function tResumeListeningIfNeeded(){
-    if (!tListening || tSpeaking) return;
+  function tStopListening(){
+    tListening = false;
+    if (tVadRaf) cancelAnimationFrame(tVadRaf);
+    if (tMediaRecorder && tMediaRecorder.state !== 'inactive'){ try{ tMediaRecorder.stop(); }catch(e){} }
+    if (tMicStream) tMicStream.getTracks().forEach(t => t.stop());
+    if (tAudioCtx) { try{ tAudioCtx.close(); }catch(e){} }
+    tStopPulse();
+    tMicBtn.classList.remove('listening');
+    tHint.textContent = "Choisissez vos deux langues, puis appuyez sur le micro.";
+  }
+
+  function tVadLoop(){
+    if (!tListening || tSpeaking){ tVadRaf = requestAnimationFrame(tVadLoop); return; }
+    const data = new Uint8Array(tAnalyser.frequencyBinCount);
+    tAnalyser.getByteFrequencyData(data);
+    let sum = 0; for (let i = 0; i < data.length; i++) sum += data[i];
+    const level = sum / data.length;
+    const now = performance.now();
+
+    if (tVadState === 'idle'){
+      if (level > SPEECH_LEVEL_THRESHOLD){
+        tVadState = 'recording';
+        tRecordStart = now;
+        tLastLoudTime = now;
+        tStartRecording();
+        tStartPulse();
+      }
+    } else if (tVadState === 'recording'){
+      if (level > SPEECH_LEVEL_THRESHOLD) tLastLoudTime = now;
+      const silentFor = now - tLastLoudTime;
+      const recordedFor = now - tRecordStart;
+      if ((silentFor > SILENCE_TO_STOP_MS && recordedFor > MIN_RECORDING_MS) || recordedFor > MAX_RECORDING_MS){
+        tVadState = 'idle';
+        tStopPulse();
+        tFinishRecording();
+      }
+    }
+    tVadRaf = requestAnimationFrame(tVadLoop);
+  }
+
+  function tStartRecording(){
+    tChunks = [];
     try{
-      tRecognition = new SpeechRecognitionImpl();
-      tRecognition.lang = tNextListenLang || sourceSel.value;
-      tRecognition.continuous = false;
-      tRecognition.interimResults = true;
-      tRecognition.onresult = tHandleResult;
-      tRecognition.onerror = tHandleError;
-      tRecognition.onend = tHandleEnd;
-      tRecognition.start();
-    }catch(e){}
+      tMediaRecorder = new MediaRecorder(tMicStream);
+    }catch(e){
+      tHint.textContent = "Enregistrement audio indisponible sur ce navigateur.";
+      return;
+    }
+    tMediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) tChunks.push(e.data); };
+    tMediaRecorder.start();
+    tHint.textContent = "Quelqu'un parle…";
+  }
+
+  function tFinishRecording(){
+    if (!tMediaRecorder || tMediaRecorder.state === 'inactive') return;
+    const recorder = tMediaRecorder;
+    recorder.onstop = async () => {
+      const blob = new Blob(tChunks, { type: recorder.mimeType || 'audio/webm' });
+      tChunks = [];
+      if (blob.size < 800) { tHint.textContent = "Écoute mains-libres — parlez, l'app détecte la langue toute seule."; return; } // trop court, probablement du bruit
+      await tProcessAudioBlob(blob);
+    };
+    try{ recorder.stop(); }catch(e){}
+  }
+
+  function tBlobToBase64(blob){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result || '';
+        const base64 = String(result).split(',')[1] || '';
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   }
 
   let tHistoryLog = [];
+  let tPendingRow = null;
 
-  let tInterimRow = null;
-
-  function tEnsureInterimRow(text){
+  async function tProcessAudioBlob(blob){
     if (tEmptyState && tEmptyState.parentNode) tEmptyState.remove();
-    if (!tInterimRow){
-      tInterimRow = document.createElement('div');
-      tInterimRow.className = 'trow interim';
-      tInterimRow.innerHTML = '<div class="src"><span class="tag">Écoute…</span><br><span class="itxt"></span></div>';
-      transList.appendChild(tInterimRow);
-    }
-    tInterimRow.querySelector('.itxt').textContent = text;
-    transList.scrollTop = transList.scrollHeight;
-  }
-
-  async function addTranslationRow(originalText){
-    let row;
-    if (tInterimRow){
-      row = tInterimRow;
-      row.className = 'trow';
-      tInterimRow = null;
-    } else {
-      if (tEmptyState && tEmptyState.parentNode) tEmptyState.remove();
-      row = document.createElement('div');
-      row.className = 'trow';
-    }
+    const row = document.createElement('div');
+    row.className = 'trow';
     row.innerHTML =
-      '<div class="src"><span class="tag">Détection…</span><br>' + escapeHtml(originalText) + '</div>' +
+      '<div class="src"><span class="tag">Détection…</span><br><span class="itxt">Transcription en cours…</span></div>' +
       '<div class="tgt loading"><span class="txt">Traduction…</span></div>';
     transList.appendChild(row);
     transList.scrollTop = transList.scrollHeight;
+    tHint.textContent = "Analyse en cours…";
 
     try{
-      const result = await translateText(originalText);
-      const detectedCode = result.detectedLang || sourceSel.value;
-      const otherCode = detectedCode === sourceSel.value ? targetSel.value : sourceSel.value;
-      const translated = result.translation;
+      const audioBase64 = await tBlobToBase64(blob);
+      const response = await fetch(BACKEND_URL + '/v1/translate-audio', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ audioBase64, langA: sourceSel.value, langB: targetSel.value })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Erreur backend');
 
-      // Met à jour la légende de langue source de cette bulle avec la langue réellement détectée.
+      if (data.empty || !data.text){
+        row.remove();
+        if (transList.children.length === 0){
+          const es = document.createElement('div'); es.className='empty-state'; es.id='tEmptyState';
+          es.innerHTML = "<b>Aucune traduction en cours.</b><br>Parlez dans l'une des deux langues, l'app détecte toute seule.";
+          transList.appendChild(es);
+        }
+        tHint.textContent = "Écoute mains-libres — parlez, l'app détecte la langue toute seule.";
+        return;
+      }
+
       const srcTag = row.querySelector('.tag');
-      if (srcTag) srcTag.textContent = result.detectedLabel || langLabel(detectedCode);
+      const srcTxt = row.querySelector('.itxt');
+      if (srcTag) srcTag.textContent = langLabel(data.detectedLang);
+      if (srcTxt) srcTxt.outerHTML = escapeHtml(data.text);
 
       const tgt = row.querySelector('.tgt');
       tgt.classList.remove('loading');
-      tgt.innerHTML = '<span class="txt">' + escapeHtml(translated) + '</span><button class="speak-btn" title="Écouter">🔊</button>';
-      tgt.querySelector('.speak-btn').addEventListener('click', () => speak(translated, otherCode));
-      speak(translated, otherCode); // lecture automatique de la traduction
-      tHistoryLog.push({ source: originalText, target: translated, sourceLang: result.detectedLabel || langLabel(detectedCode), targetLang: langLabel(otherCode) });
+      tgt.innerHTML = '<span class="txt">' + escapeHtml(data.translation) + '</span><button class="speak-btn" title="Écouter">🔊</button>';
+      tgt.querySelector('.speak-btn').addEventListener('click', () => tSpeak(data.translation, data.targetLang));
 
-      // Tour suivant : on s'attend à ce que l'autre personne réponde dans l'autre langue.
-      tNextListenLang = otherCode;
+      refreshSpeakerLabels(data.detectedLang);
+      tHistoryLog.push({ source: data.text, target: data.translation, sourceLang: langLabel(data.detectedLang), targetLang: langLabel(data.targetLang) });
+
+      tSpeak(data.translation, data.targetLang);
     }catch(e){
       const tgt = row.querySelector('.tgt');
       tgt.classList.remove('loading');
       tgt.innerHTML = '<span class="txt" style="color:var(--danger)">Échec — vérifiez que le backend tourne sur ' + escapeHtml(BACKEND_URL) + '.</span>';
+      tHint.textContent = "Écoute mains-libres — parlez, l'app détecte la langue toute seule.";
     }
     transList.scrollTop = transList.scrollHeight;
+  }
+
+  function tSpeak(text, langCode){
+    if (!window.speechSynthesis){ return; }
+    tSpeaking = true;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = langCode;
+    utter.onend = () => { tSpeaking = false; if (tListening) tHint.textContent = "Écoute mains-libres — parlez, l'app détecte la langue toute seule."; };
+    utter.onerror = () => { tSpeaking = false; };
+    window.speechSynthesis.speak(utter);
   }
 
   function saveTranslationSession(){
@@ -1017,77 +1110,21 @@ html, body{ margin:0; padding:0; }
     tHistoryLog = [];
   }
 
-  let tNextListenLang = null;
-
-  function tHandleResult(event){
-    let interimText = '';
-    for (let i = event.resultIndex; i < event.results.length; i++){
-      const res = event.results[i];
-      if (res.isFinal){
-        const text = res[0].transcript.trim();
-        if (text) addTranslationRow(text);
-      } else {
-        interimText += res[0].transcript;
-      }
-    }
-    if (interimText) tEnsureInterimRow(interimText);
-  }
-  function tHandleError(e){
-    if (e.error === 'not-allowed'){ tHint.textContent = "Accès micro refusé."; tListening = false; tMicBtn.classList.remove('listening'); tStopPulse(); return; }
-    if (e.error !== 'no-speech') tHint.textContent = "Petit souci d'écoute — réessayez.";
-  }
-  function tHandleEnd(){
-    // Ne redémarre pas tout seul si l'app est en train de parler — c'est
-    // tResumeListeningIfNeeded() (déclenché à la fin de la lecture vocale) qui
-    // reprendra l'écoute, pour ne jamais capter sa propre voix de synthèse.
-    if (tListening && !tSpeaking){
-      try{
-        tRecognition.lang = tNextListenLang || sourceSel.value; // bascule vers l'autre langue pour le tour suivant
-        tRecognition.start();
-      }catch(e){}
-    }
-  }
-
-  async function tStartListening(){
-    if (!SpeechRecognitionImpl){ tHint.textContent = "Reconnaissance vocale indisponible ici — utilisez Chrome ou Edge."; return; }
-    tStartPulse();
-
-    tRecognition = new SpeechRecognitionImpl();
-    tRecognition.lang = tNextListenLang || sourceSel.value;
-    tRecognition.continuous = false;
-    tRecognition.interimResults = true;
-    tRecognition.onresult = tHandleResult;
-    tRecognition.onerror = tHandleError;
-    tRecognition.onend = tHandleEnd;
-
-    tRecognition.start();
-    tListening = true; tMicBtn.classList.add('listening'); tHint.textContent = "Écoute en cours… parlez dans l'une ou l'autre langue.";
-  }
-  function tStopListening(){
-    tListening = false;
-    tNextListenLang = null;
-    if (tRecognition){ tRecognition.onend = null; tRecognition.stop(); }
-    tStopPulse();
-    tMicBtn.classList.remove('listening');
-    tHint.textContent = "Choisissez vos deux langues, puis appuyez sur le micro.";
-  }
-
   tMicBtn.addEventListener('click', () => tListening ? tStopListening() : tStartListening());
-  sourceSel.addEventListener('change', () => { if (tListening) tStopListening(); });
   tResetBtn.addEventListener('click', () => {
     saveTranslationSession();
     transList.innerHTML = '';
     const es = document.createElement('div'); es.className='empty-state'; es.id='tEmptyState';
-    es.innerHTML = '<b>Aucune traduction en cours.</b><br>Parlez dans la langue source, la traduction apparaîtra à droite.';
+    es.innerHTML = "<b>Aucune traduction en cours.</b><br>Parlez dans l'une des deux langues, l'app détecte toute seule.";
     transList.appendChild(es);
   });
 
-  // Coupe le micro de traduction si on quitte l'écran via l'accueil / la barre basse,
-  // et sauvegarde la session dans l'historique persistant au passage.
+  // Coupe le micro si on quitte l'écran, et sauvegarde la session dans l'historique.
   document.querySelectorAll('[data-goto], .tab').forEach(el => {
     el.addEventListener('click', () => { if (tListening) tStopListening(); saveTranslationSession(); });
   });
 })();
+
 
 // ==================== PROFILS DE SENSIBILITÉ ====================
 (function(){
