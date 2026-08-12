@@ -916,7 +916,7 @@ html, body{ margin:0; padding:0; }
   const BACKEND_URL = 'https://audyo-backend.onrender.com';
 
   let tListening = false, tSpeaking = false;
-  let tSocket = null, tMicStream = null, tRecorder = null;
+  let tSocket = null, tMicStream = null;
   let tInterimRow = null;
   let tHistoryLog = [];
 
@@ -937,15 +937,22 @@ html, body{ margin:0; padding:0; }
       const token = await tGetToken();
       tMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
+      // Format audio brut (PCM 16 bits, 16 kHz) — le format par défaut du
+      // service, le plus universellement compatible. On évite volontairement
+      // les formats compressés (webm/opus) : le conteneur produit par le
+      // navigateur (WebM) n'est pas le même que celui attendu par le service
+      // en mode compressé (Ogg), ce qui provoquait une fermeture immédiate
+      // et silencieuse de la connexion.
       const wsUrl = 'wss://streaming.assemblyai.com/v3/ws?token=' + encodeURIComponent(token) +
-        '&speech_model=universal-3-5-pro&language_detection=true&encoding=ogg_opus';
+        '&speech_model=universal-3-5-pro&language_detection=true&encoding=pcm_s16le&sample_rate=16000';
       tSocket = new WebSocket(wsUrl);
+      tSocket.binaryType = 'arraybuffer';
 
       tSocket.onopen = () => {
         tListening = true;
         tStartPulse();
         tHint.textContent = "Écoute mains-libres — parlez, l'app détecte la langue toute seule.";
-        tStartRecorder();
+        tStartRawAudioCapture();
       };
       tSocket.onmessage = (event) => {
         try{ tHandleSocketMessage(JSON.parse(event.data)); }catch(e){}
@@ -963,34 +970,70 @@ html, body{ margin:0; padding:0; }
     }
   }
 
-  function tStartRecorder(){
+  let tAudioCtx = null, tAudioSourceNode = null, tAudioProcessor = null;
+
+  function tStartRawAudioCapture(){
     if (!tMicStream) return;
-    let options;
     try{
-      if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')){
-        options = { mimeType: 'audio/webm;codecs=opus' };
-      }
-    }catch(e){}
-    try{
-      tRecorder = options ? new MediaRecorder(tMicStream, options) : new MediaRecorder(tMicStream);
+      tAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      tAudioSourceNode = tAudioCtx.createMediaStreamSource(tMicStream);
+      // ScriptProcessorNode est déprécié mais reste largement supporté — même
+      // technique déjà utilisée avec succès ailleurs dans l'app (module
+      // Amplification), donc un choix éprouvé plutôt qu'expérimental ici.
+      tAudioProcessor = tAudioCtx.createScriptProcessor(4096, 1, 1);
+      const nativeRate = tAudioCtx.sampleRate;
+
+      tAudioProcessor.onaudioprocess = (e) => {
+        if (tSpeaking) return; // on n'envoie pas le son pendant que l'app lit la traduction à voix haute
+        if (!tSocket || tSocket.readyState !== WebSocket.OPEN) return;
+        const input = e.inputBuffer.getChannelData(0);
+        const resampled = tResampleTo16k(input, nativeRate);
+        const pcm16 = tFloatTo16BitPCM(resampled);
+        tSocket.send(pcm16);
+      };
+      tAudioSourceNode.connect(tAudioProcessor);
+      // Nécessaire sur certains navigateurs pour que onaudioprocess se déclenche ;
+      // le volume de sortie réel est neutralisé pour ne jamais rejouer le son du micro.
+      const muteGain = tAudioCtx.createGain();
+      muteGain.gain.value = 0;
+      tAudioProcessor.connect(muteGain);
+      muteGain.connect(tAudioCtx.destination);
     }catch(e){
-      tHint.textContent = "Enregistrement audio indisponible sur ce navigateur.";
-      return;
+      tHint.textContent = "Capture audio indisponible sur ce navigateur.";
     }
-    tRecorder.ondataavailable = (e) => {
-      if (tSpeaking) return; // on n'envoie pas le son pendant que l'app lit la traduction à voix haute
-      if (!e.data || e.data.size === 0) return;
-      if (!tSocket || tSocket.readyState !== WebSocket.OPEN) return;
-      e.data.arrayBuffer().then((buf) => {
-        if (tSocket && tSocket.readyState === WebSocket.OPEN) tSocket.send(buf);
-      }).catch(() => {});
-    };
-    tRecorder.start(250); // envoie un petit paquet audio toutes les 250 ms
+  }
+
+  function tResampleTo16k(buffer, inputRate){
+    if (inputRate === 16000) return buffer;
+    const ratio = inputRate / 16000;
+    const outLength = Math.floor(buffer.length / ratio);
+    const out = new Float32Array(outLength);
+    for (let i = 0; i < outLength; i++){
+      const srcIndex = i * ratio;
+      const i0 = Math.floor(srcIndex);
+      const i1 = Math.min(i0 + 1, buffer.length - 1);
+      const frac = srcIndex - i0;
+      out[i] = buffer[i0] * (1 - frac) + buffer[i1] * frac;
+    }
+    return out;
+  }
+
+  function tFloatTo16BitPCM(float32Array){
+    const buffer = new ArrayBuffer(float32Array.length * 2);
+    const view = new DataView(buffer);
+    let offset = 0;
+    for (let i = 0; i < float32Array.length; i++, offset += 2){
+      const s = Math.max(-1, Math.min(1, float32Array[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true); // true = little-endian
+    }
+    return buffer;
   }
 
   function tStopListening(){
     tListening = false;
-    if (tRecorder && tRecorder.state !== 'inactive'){ try{ tRecorder.stop(); }catch(e){} }
+    if (tAudioProcessor){ try{ tAudioProcessor.disconnect(); tAudioProcessor.onaudioprocess = null; }catch(e){} tAudioProcessor = null; }
+    if (tAudioSourceNode){ try{ tAudioSourceNode.disconnect(); }catch(e){} tAudioSourceNode = null; }
+    if (tAudioCtx){ try{ tAudioCtx.close(); }catch(e){} tAudioCtx = null; }
     if (tSocket){
       try{ tSocket.send(JSON.stringify({ type: 'Terminate' })); }catch(e){}
       try{ tSocket.close(); }catch(e){}
