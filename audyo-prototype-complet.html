@@ -125,6 +125,8 @@ html, body{ margin:0; padding:0; }
 .swap-btn:active{ transform:scale(0.9); }
 .trans-list{ flex:1; overflow-y:auto; padding:4px 16px 10px; display:flex; flex-direction:column; gap:10px; }
 .trow{ border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+.trow.interim{ opacity:.65; border-style:dashed; }
+.trow.interim .itxt{ font-style:italic; }
 .trow .src{ padding:9px 12px; font-size:13px; color:var(--ink); background:var(--panel); }
 .trow .tgt{ padding:9px 12px; font-size:13px; color:var(--spk-b); background:var(--spk-b-bg); display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .trow .tgt .txt{ flex:1; }
@@ -935,7 +937,7 @@ html, body{ margin:0; padding:0; }
       tRecognition = new SpeechRecognitionImpl();
       tRecognition.lang = tNextListenLang || sourceSel.value;
       tRecognition.continuous = false;
-      tRecognition.interimResults = false;
+      tRecognition.interimResults = true;
       tRecognition.onresult = tHandleResult;
       tRecognition.onerror = tHandleError;
       tRecognition.onend = tHandleEnd;
@@ -945,10 +947,31 @@ html, body{ margin:0; padding:0; }
 
   let tHistoryLog = [];
 
-  async function addTranslationRow(originalText){
+  let tInterimRow = null;
+
+  function tEnsureInterimRow(text){
     if (tEmptyState && tEmptyState.parentNode) tEmptyState.remove();
-    const row = document.createElement('div');
-    row.className = 'trow';
+    if (!tInterimRow){
+      tInterimRow = document.createElement('div');
+      tInterimRow.className = 'trow interim';
+      tInterimRow.innerHTML = '<div class="src"><span class="tag">Écoute…</span><br><span class="itxt"></span></div>';
+      transList.appendChild(tInterimRow);
+    }
+    tInterimRow.querySelector('.itxt').textContent = text;
+    transList.scrollTop = transList.scrollHeight;
+  }
+
+  async function addTranslationRow(originalText){
+    let row;
+    if (tInterimRow){
+      row = tInterimRow;
+      row.className = 'trow';
+      tInterimRow = null;
+    } else {
+      if (tEmptyState && tEmptyState.parentNode) tEmptyState.remove();
+      row = document.createElement('div');
+      row.className = 'trow';
+    }
     row.innerHTML =
       '<div class="src"><span class="tag">Détection…</span><br>' + escapeHtml(originalText) + '</div>' +
       '<div class="tgt loading"><span class="txt">Traduction…</span></div>';
@@ -997,13 +1020,17 @@ html, body{ margin:0; padding:0; }
   let tNextListenLang = null;
 
   function tHandleResult(event){
+    let interimText = '';
     for (let i = event.resultIndex; i < event.results.length; i++){
       const res = event.results[i];
       if (res.isFinal){
         const text = res[0].transcript.trim();
         if (text) addTranslationRow(text);
+      } else {
+        interimText += res[0].transcript;
       }
     }
+    if (interimText) tEnsureInterimRow(interimText);
   }
   function tHandleError(e){
     if (e.error === 'not-allowed'){ tHint.textContent = "Accès micro refusé."; tListening = false; tMicBtn.classList.remove('listening'); tStopPulse(); return; }
@@ -1028,7 +1055,7 @@ html, body{ margin:0; padding:0; }
     tRecognition = new SpeechRecognitionImpl();
     tRecognition.lang = tNextListenLang || sourceSel.value;
     tRecognition.continuous = false;
-    tRecognition.interimResults = false;
+    tRecognition.interimResults = true;
     tRecognition.onresult = tHandleResult;
     tRecognition.onerror = tHandleError;
     tRecognition.onend = tHandleEnd;
