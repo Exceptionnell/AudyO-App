@@ -909,12 +909,38 @@ html, body{ margin:0; padding:0; }
     return data; // { translation, detectedLang, detectedLabel }
   }
 
+  let tSpeaking = false;
+
   function speak(text, langCode){
-    if (!window.speechSynthesis) return;
+    if (!window.speechSynthesis){
+      // Pas de synthèse vocale disponible : rien à mettre en pause, l'écoute continue normalement.
+      return;
+    }
+    // On coupe la reconnaissance avant de parler, pour que le micro n'entende pas
+    // la voix de synthèse et ne la retraduise pas en boucle (effet "monologue").
+    tSpeaking = true;
+    if (tRecognition){ try{ tRecognition.onend = null; tRecognition.stop(); }catch(e){} }
+
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = langCode;
+    utter.onend = () => { tSpeaking = false; tResumeListeningIfNeeded(); };
+    utter.onerror = () => { tSpeaking = false; tResumeListeningIfNeeded(); };
     window.speechSynthesis.speak(utter);
+  }
+
+  function tResumeListeningIfNeeded(){
+    if (!tListening || tSpeaking) return;
+    try{
+      tRecognition = new SpeechRecognitionImpl();
+      tRecognition.lang = tNextListenLang || sourceSel.value;
+      tRecognition.continuous = false;
+      tRecognition.interimResults = false;
+      tRecognition.onresult = tHandleResult;
+      tRecognition.onerror = tHandleError;
+      tRecognition.onend = tHandleEnd;
+      tRecognition.start();
+    }catch(e){}
   }
 
   let tHistoryLog = [];
@@ -970,6 +996,31 @@ html, body{ margin:0; padding:0; }
 
   let tNextListenLang = null;
 
+  function tHandleResult(event){
+    for (let i = event.resultIndex; i < event.results.length; i++){
+      const res = event.results[i];
+      if (res.isFinal){
+        const text = res[0].transcript.trim();
+        if (text) addTranslationRow(text);
+      }
+    }
+  }
+  function tHandleError(e){
+    if (e.error === 'not-allowed'){ tHint.textContent = "Accès micro refusé."; tListening = false; tMicBtn.classList.remove('listening'); tStopPulse(); return; }
+    if (e.error !== 'no-speech') tHint.textContent = "Petit souci d'écoute — réessayez.";
+  }
+  function tHandleEnd(){
+    // Ne redémarre pas tout seul si l'app est en train de parler — c'est
+    // tResumeListeningIfNeeded() (déclenché à la fin de la lecture vocale) qui
+    // reprendra l'écoute, pour ne jamais capter sa propre voix de synthèse.
+    if (tListening && !tSpeaking){
+      try{
+        tRecognition.lang = tNextListenLang || sourceSel.value; // bascule vers l'autre langue pour le tour suivant
+        tRecognition.start();
+      }catch(e){}
+    }
+  }
+
   async function tStartListening(){
     if (!SpeechRecognitionImpl){ tHint.textContent = "Reconnaissance vocale indisponible ici — utilisez Chrome ou Edge."; return; }
     tStartPulse();
@@ -978,28 +1029,9 @@ html, body{ margin:0; padding:0; }
     tRecognition.lang = tNextListenLang || sourceSel.value;
     tRecognition.continuous = false;
     tRecognition.interimResults = false;
-
-    tRecognition.onresult = (event) => {
-      for (let i = event.resultIndex; i < event.results.length; i++){
-        const res = event.results[i];
-        if (res.isFinal){
-          const text = res[0].transcript.trim();
-          if (text) addTranslationRow(text);
-        }
-      }
-    };
-    tRecognition.onerror = (e) => {
-      if (e.error === 'not-allowed'){ tHint.textContent = "Accès micro refusé."; tListening = false; tMicBtn.classList.remove('listening'); tStopPulse(); return; }
-      if (e.error !== 'no-speech') tHint.textContent = "Petit souci d'écoute — réessayez.";
-    };
-    tRecognition.onend = () => {
-      if (tListening){
-        try{
-          tRecognition.lang = tNextListenLang || sourceSel.value; // bascule vers l'autre langue pour le tour suivant
-          tRecognition.start();
-        }catch(e){}
-      }
-    };
+    tRecognition.onresult = tHandleResult;
+    tRecognition.onerror = tHandleError;
+    tRecognition.onend = tHandleEnd;
 
     tRecognition.start();
     tListening = true; tMicBtn.classList.add('listening'); tHint.textContent = "Écoute en cours… parlez dans l'une ou l'autre langue.";
