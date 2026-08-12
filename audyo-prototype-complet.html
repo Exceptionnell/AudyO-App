@@ -857,17 +857,17 @@ html, body{ margin:0; padding:0; }
   });
 })();
 
-// ==================== MODULE TRADUCTION (mains-libres, détection auto) ====================
+// ==================== MODULE TRADUCTION (flux continu temps réel) ====================
 (function(){
   const LANGUAGES = [
-    { code:'fr-FR', label:'Français' },
-    { code:'en-US', label:'English' },
-    { code:'es-ES', label:'Español' },
-    { code:'de-DE', label:'Deutsch' },
-    { code:'it-IT', label:'Italiano' },
-    { code:'pt-PT', label:'Português' },
-    { code:'zh-CN', label:'中文' },
-    { code:'ar-SA', label:'العربية' },
+    { code:'fr-FR', short:'fr', label:'Français' },
+    { code:'en-US', short:'en', label:'English' },
+    { code:'es-ES', short:'es', label:'Español' },
+    { code:'de-DE', short:'de', label:'Deutsch' },
+    { code:'it-IT', short:'it', label:'Italiano' },
+    { code:'pt-PT', short:'pt', label:'Português' },
+    { code:'zh-CN', short:'zh', label:'中文' },
+    { code:'ar-SA', short:'ar', label:'العربية' },
   ];
 
   const sourceSel = document.getElementById('tSourceLang');
@@ -894,10 +894,8 @@ html, body{ margin:0; padding:0; }
 
   function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function langLabel(code){ const l = LANGUAGES.find(x => x.code === code); return l ? l.label : code; }
+  function shortToFull(shortCode){ const l = LANGUAGES.find(x => x.short === shortCode); return l ? l.code : null; }
 
-  // Les deux boutons deviennent de simples indicateurs (qui a parlé en
-  // dernier), pas des boutons à toucher — la langue est détectée
-  // automatiquement depuis l'audio par le backend (AssemblyAI + IA).
   function refreshSpeakerLabels(activeCode){
     speakerBtnA.textContent = langLabel(sourceSel.value);
     speakerBtnB.textContent = langLabel(targetSel.value);
@@ -915,180 +913,160 @@ html, body{ margin:0; padding:0; }
   sourceSel.addEventListener('change', () => { if (tListening) tStopListening(); refreshSpeakerLabels(null); });
   targetSel.addEventListener('change', () => { if (tListening) tStopListening(); refreshSpeakerLabels(null); });
 
-  // URL du backend AudyO — modifiez cette valeur si votre serveur tourne ailleurs.
   const BACKEND_URL = 'https://audyo-backend.onrender.com';
 
   let tListening = false, tSpeaking = false;
-  let tAudioCtx = null, tAnalyser = null, tMicStream = null, tSourceNode = null;
-  let tMediaRecorder = null, tChunks = [];
-  let tVadState = 'idle'; // idle | recording
-  let tLastLoudTime = 0, tRecordStart = 0, tVadRaf = null;
-
-  const SPEECH_LEVEL_THRESHOLD = 18;   // seuil de niveau sonore (0-255) considéré comme "quelqu'un parle"
-  const SILENCE_TO_STOP_MS = 1100;     // silence continu avant de considérer la phrase terminée
-  const MIN_RECORDING_MS = 450;        // ignore les bruits trop courts (clics, souffle)
-  const MAX_RECORDING_MS = 14000;      // filet de sécurité si quelqu'un parle très longtemps
+  let tSocket = null, tMicStream = null, tRecorder = null;
+  let tInterimRow = null;
+  let tHistoryLog = [];
 
   function tStartPulse(){ tRing1.classList.add('on'); tRing2.classList.add('on'); }
   function tStopPulse(){ tRing1.classList.remove('on'); tRing2.classList.remove('on'); }
 
+  async function tGetToken(){
+    const r = await fetch(BACKEND_URL + '/v1/streaming-token');
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Jeton indisponible');
+    return d.token;
+  }
+
   async function tStartListening(){
+    tMicBtn.classList.add('listening');
+    tHint.textContent = 'Connexion…';
     try{
+      const token = await tGetToken();
       tMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      const wsUrl = 'wss://streaming.assemblyai.com/v3/ws?token=' + encodeURIComponent(token) +
+        '&speech_model=universal-3-5-pro&language_detection=true&encoding=ogg_opus';
+      tSocket = new WebSocket(wsUrl);
+
+      tSocket.onopen = () => {
+        tListening = true;
+        tStartPulse();
+        tHint.textContent = "Écoute mains-libres — parlez, l'app détecte la langue toute seule.";
+        tStartRecorder();
+      };
+      tSocket.onmessage = (event) => {
+        try{ tHandleSocketMessage(JSON.parse(event.data)); }catch(e){}
+      };
+      tSocket.onerror = () => {
+        tHint.textContent = "Connexion au service de reconnaissance interrompue.";
+      };
+      tSocket.onclose = () => {
+        if (tListening) tStopListening();
+      };
     }catch(e){
-      tHint.textContent = "Accès micro refusé.";
+      tHint.textContent = "Impossible de démarrer l'écoute (" + escapeHtml(e.message || '') + ").";
+      tMicBtn.classList.remove('listening');
+      tStopPulse();
+    }
+  }
+
+  function tStartRecorder(){
+    if (!tMicStream) return;
+    let options;
+    try{
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')){
+        options = { mimeType: 'audio/webm;codecs=opus' };
+      }
+    }catch(e){}
+    try{
+      tRecorder = options ? new MediaRecorder(tMicStream, options) : new MediaRecorder(tMicStream);
+    }catch(e){
+      tHint.textContent = "Enregistrement audio indisponible sur ce navigateur.";
       return;
     }
-    tAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    tSourceNode = tAudioCtx.createMediaStreamSource(tMicStream);
-    tAnalyser = tAudioCtx.createAnalyser();
-    tAnalyser.fftSize = 512;
-    tSourceNode.connect(tAnalyser);
-
-    tListening = true;
-    tMicBtn.classList.add('listening');
-    tHint.textContent = "Écoute mains-libres — parlez, l'app détecte la langue toute seule.";
-    tVadState = 'idle';
-    tVadLoop();
+    tRecorder.ondataavailable = (e) => {
+      if (tSpeaking) return; // on n'envoie pas le son pendant que l'app lit la traduction à voix haute
+      if (!e.data || e.data.size === 0) return;
+      if (!tSocket || tSocket.readyState !== WebSocket.OPEN) return;
+      e.data.arrayBuffer().then((buf) => {
+        if (tSocket && tSocket.readyState === WebSocket.OPEN) tSocket.send(buf);
+      }).catch(() => {});
+    };
+    tRecorder.start(250); // envoie un petit paquet audio toutes les 250 ms
   }
 
   function tStopListening(){
     tListening = false;
-    if (tVadRaf) cancelAnimationFrame(tVadRaf);
-    if (tMediaRecorder && tMediaRecorder.state !== 'inactive'){ try{ tMediaRecorder.stop(); }catch(e){} }
-    if (tMicStream) tMicStream.getTracks().forEach(t => t.stop());
-    if (tAudioCtx) { try{ tAudioCtx.close(); }catch(e){} }
+    if (tRecorder && tRecorder.state !== 'inactive'){ try{ tRecorder.stop(); }catch(e){} }
+    if (tSocket){
+      try{ tSocket.send(JSON.stringify({ type: 'Terminate' })); }catch(e){}
+      try{ tSocket.close(); }catch(e){}
+      tSocket = null;
+    }
+    if (tMicStream){ tMicStream.getTracks().forEach(t => t.stop()); tMicStream = null; }
     tStopPulse();
     tMicBtn.classList.remove('listening');
     tHint.textContent = "Choisissez vos deux langues, puis appuyez sur le micro.";
   }
 
-  function tVadLoop(){
-    if (!tListening || tSpeaking){ tVadRaf = requestAnimationFrame(tVadLoop); return; }
-    const data = new Uint8Array(tAnalyser.frequencyBinCount);
-    tAnalyser.getByteFrequencyData(data);
-    let sum = 0; for (let i = 0; i < data.length; i++) sum += data[i];
-    const level = sum / data.length;
-    const now = performance.now();
-
-    if (tVadState === 'idle'){
-      if (level > SPEECH_LEVEL_THRESHOLD){
-        tVadState = 'recording';
-        tRecordStart = now;
-        tLastLoudTime = now;
-        tStartRecording();
-        tStartPulse();
-      }
-    } else if (tVadState === 'recording'){
-      if (level > SPEECH_LEVEL_THRESHOLD) tLastLoudTime = now;
-      const silentFor = now - tLastLoudTime;
-      const recordedFor = now - tRecordStart;
-      if ((silentFor > SILENCE_TO_STOP_MS && recordedFor > MIN_RECORDING_MS) || recordedFor > MAX_RECORDING_MS){
-        tVadState = 'idle';
-        tStopPulse();
-        tFinishRecording();
-      }
+  function tEnsureInterimRow(text){
+    if (tEmptyState && tEmptyState.parentNode) tEmptyState.remove();
+    if (!tInterimRow){
+      tInterimRow = document.createElement('div');
+      tInterimRow.className = 'trow interim';
+      tInterimRow.innerHTML = '<div class="src"><span class="tag">Écoute…</span><br><span class="itxt"></span></div>';
+      transList.appendChild(tInterimRow);
     }
-    tVadRaf = requestAnimationFrame(tVadLoop);
+    const itxt = tInterimRow.querySelector('.itxt');
+    if (itxt) itxt.textContent = text;
+    transList.scrollTop = transList.scrollHeight;
   }
 
-  function tStartRecording(){
-    tChunks = [];
-    try{
-      tMediaRecorder = new MediaRecorder(tMicStream);
-    }catch(e){
-      tHint.textContent = "Enregistrement audio indisponible sur ce navigateur.";
+  function tHandleSocketMessage(msg){
+    if (!msg || msg.type !== 'Turn') return;
+    const text = msg.transcript || '';
+    if (!msg.end_of_turn){
+      if (text) tEnsureInterimRow(text);
       return;
     }
-    tMediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) tChunks.push(e.data); };
-    tMediaRecorder.start();
-    tHint.textContent = "Quelqu'un parle…";
+    const finalText = (msg.utterance || msg.transcript || '').trim();
+    if (!finalText) return;
+    tProcessFinalTurn(finalText, msg.language_code);
   }
 
-  function tFinishRecording(){
-    if (!tMediaRecorder || tMediaRecorder.state === 'inactive') return;
-    const recorder = tMediaRecorder;
-    recorder.onstop = async () => {
-      const blob = new Blob(tChunks, { type: recorder.mimeType || 'audio/webm' });
-      tChunks = [];
-      if (blob.size < 800) { tHint.textContent = "Écoute mains-libres — parlez, l'app détecte la langue toute seule."; return; } // trop court, probablement du bruit
-      await tProcessAudioBlob(blob);
-    };
-    try{ recorder.stop(); }catch(e){}
-  }
+  async function tProcessFinalTurn(text, shortLangCode){
+    let row;
+    if (tInterimRow){ row = tInterimRow; row.className = 'trow'; tInterimRow = null; }
+    else { if (tEmptyState && tEmptyState.parentNode) tEmptyState.remove(); row = document.createElement('div'); row.className = 'trow'; }
 
-  function tBlobToBase64(blob){
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result || '';
-        const base64 = String(result).split(',')[1] || '';
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
+    const detectedFull = shortToFull(shortLangCode) || sourceSel.value;
+    const targetFull = detectedFull === sourceSel.value ? targetSel.value : sourceSel.value;
 
-  let tHistoryLog = [];
-  let tPendingRow = null;
-
-  async function tProcessAudioBlob(blob){
-    if (tEmptyState && tEmptyState.parentNode) tEmptyState.remove();
-    const row = document.createElement('div');
-    row.className = 'trow';
     row.innerHTML =
-      '<div class="src"><span class="tag">Détection…</span><br><span class="itxt">Transcription en cours…</span></div>' +
+      '<div class="src"><span class="tag">' + escapeHtml(langLabel(detectedFull)) + '</span><br>' + escapeHtml(text) + '</div>' +
       '<div class="tgt loading"><span class="txt">Traduction…</span></div>';
     transList.appendChild(row);
     transList.scrollTop = transList.scrollHeight;
-    tHint.textContent = "Analyse en cours…";
+    refreshSpeakerLabels(detectedFull);
 
     try{
-      const audioBase64 = await tBlobToBase64(blob);
-      const response = await fetch(BACKEND_URL + '/v1/translate-audio', {
+      const response = await fetch(BACKEND_URL + '/v1/translate', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ audioBase64, langA: sourceSel.value, langB: targetSel.value })
+        body: JSON.stringify({ text, sourceLang: detectedFull, targetLang: targetFull })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Erreur backend');
 
-      if (data.empty || !data.text){
-        row.remove();
-        if (transList.children.length === 0){
-          const es = document.createElement('div'); es.className='empty-state'; es.id='tEmptyState';
-          es.innerHTML = "<b>Aucune traduction en cours.</b><br>Parlez dans l'une des deux langues, l'app détecte toute seule.";
-          transList.appendChild(es);
-        }
-        tHint.textContent = "Écoute mains-libres — parlez, l'app détecte la langue toute seule.";
-        return;
-      }
-
-      const srcTag = row.querySelector('.tag');
-      const srcTxt = row.querySelector('.itxt');
-      if (srcTag) srcTag.textContent = langLabel(data.detectedLang);
-      if (srcTxt) srcTxt.outerHTML = escapeHtml(data.text);
-
       const tgt = row.querySelector('.tgt');
       tgt.classList.remove('loading');
       tgt.innerHTML = '<span class="txt">' + escapeHtml(data.translation) + '</span><button class="speak-btn" title="Écouter">🔊</button>';
-      tgt.querySelector('.speak-btn').addEventListener('click', () => tSpeak(data.translation, data.targetLang));
+      tgt.querySelector('.speak-btn').addEventListener('click', () => tSpeak(data.translation, targetFull));
+      tHistoryLog.push({ source: text, target: data.translation, sourceLang: langLabel(detectedFull), targetLang: langLabel(targetFull) });
 
-      refreshSpeakerLabels(data.detectedLang);
-      tHistoryLog.push({ source: data.text, target: data.translation, sourceLang: langLabel(data.detectedLang), targetLang: langLabel(data.targetLang) });
-
-      tSpeak(data.translation, data.targetLang);
+      tSpeak(data.translation, targetFull);
     }catch(e){
       const tgt = row.querySelector('.tgt');
       tgt.classList.remove('loading');
       tgt.innerHTML = '<span class="txt" style="color:var(--danger)">Échec — vérifiez que le backend tourne sur ' + escapeHtml(BACKEND_URL) + '.</span>';
-      tHint.textContent = "Écoute mains-libres — parlez, l'app détecte la langue toute seule.";
     }
     transList.scrollTop = transList.scrollHeight;
   }
 
   function tSpeak(text, langCode){
-    if (!window.speechSynthesis){ return; }
+    if (!window.speechSynthesis) return;
     tSpeaking = true;
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
@@ -1114,16 +1092,16 @@ html, body{ margin:0; padding:0; }
   tResetBtn.addEventListener('click', () => {
     saveTranslationSession();
     transList.innerHTML = '';
-    const es = document.createElement('div'); es.className='empty-state'; es.id='tEmptyState';
+    const es = document.createElement('div'); es.className = 'empty-state'; es.id = 'tEmptyState';
     es.innerHTML = "<b>Aucune traduction en cours.</b><br>Parlez dans l'une des deux langues, l'app détecte toute seule.";
     transList.appendChild(es);
   });
 
-  // Coupe le micro si on quitte l'écran, et sauvegarde la session dans l'historique.
   document.querySelectorAll('[data-goto], .tab').forEach(el => {
     el.addEventListener('click', () => { if (tListening) tStopListening(); saveTranslationSession(); });
   });
 })();
+
 
 
 // ==================== PROFILS DE SENSIBILITÉ ====================
