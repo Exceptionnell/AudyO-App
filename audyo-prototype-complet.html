@@ -819,9 +819,12 @@ html, body{ margin:0; padding:0; }
     const lines = (md || '').split('\n').filter(Boolean);
     let html = '', inList = false;
     lines.forEach(line => {
-      const trimmed = line.trim();
+      let trimmed = line.trim();
+      if (/^[-_*]{3,}$/.test(trimmed)) return; // ligne de séparation --- / *** : ignorée
       const heading = trimmed.match(/^#{1,6}\s*(.+)$/);
-      const bullet = trimmed.match(/^[-•]\s+(.+)$/);
+      const bullet = trimmed.match(/^[-•▪]\s+(.+)$/) || trimmed.match(/^\d+\.\s+(.+)$/);
+      const quote = trimmed.match(/^>\s*(.*)$/);
+      if (quote) trimmed = quote[1] || 'Aucune';
       if (heading){
         if (inList){ html += '</ul>'; inList = false; }
         html += '<h4>' + escapeHtml(heading[1].replace(/\*\*/g,'')) + '</h4>';
@@ -1314,9 +1317,12 @@ html, body{ margin:0; padding:0; }
     const lines = (md || '').split('\n').filter(Boolean);
     let html = '', inList = false;
     lines.forEach(line => {
-      const trimmed = line.trim();
+      let trimmed = line.trim();
+      if (/^[-_*]{3,}$/.test(trimmed)) return; // ligne de séparation --- / *** : ignorée
       const heading = trimmed.match(/^#{1,6}\s*(.+)$/);
-      const bullet = trimmed.match(/^[-•]\s+(.+)$/);
+      const bullet = trimmed.match(/^[-•▪]\s+(.+)$/) || trimmed.match(/^\d+\.\s+(.+)$/);
+      const quote = trimmed.match(/^>\s*(.*)$/);
+      if (quote) trimmed = quote[1] || 'Aucune';
       if (heading){
         if (inList){ html += '</ul>'; inList = false; }
         html += '<h4>' + escapeHtml(heading[1].replace(/\*\*/g,'')) + '</h4>';
@@ -1340,9 +1346,13 @@ html, body{ margin:0; padding:0; }
       .replace(/^#{1,6}\s*/gm, '')
       .replace(/\*\*(.+?)\*\*/g, '$1')
       .replace(/\*(.+?)\*/g, '$1')
-      .replace(/^[-•]\s+/gm, '')
+      .replace(/^[-•▪]\s+/gm, '')
+      .replace(/^\d+\.\s+/gm, '')
+      .replace(/^>\s*/gm, '')
+      .replace(/^[-_*]{3,}\s*$/gm, '')
       .replace(/`/g, '')
       .replace(/["""«»]/g, '')
+      .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
       .replace(/\s{2,}/g, ' ')
       .trim();
   }
