@@ -97,6 +97,11 @@ html, body{ margin:0; padding:0; }
 .summary-header h3{ font-family:'Plus Jakarta Sans',sans-serif; font-weight:700; font-size:15px; margin:0; }
 .summary-header button{ border:none; background:var(--panel-raised); color:var(--ink); width:26px; height:26px; border-radius:50%; cursor:pointer; }
 .summary-body{ flex:1; overflow-y:auto; padding:16px 18px; font-size:13px; line-height:1.5; }
+.summary-body h4{ font-size:13.5px; font-weight:800; color:var(--coral); margin:14px 0 6px; }
+.summary-body h4:first-child{ margin-top:0; }
+.summary-body ul{ margin:0 0 10px; padding-left:18px; }
+.summary-body li{ margin-bottom:4px; }
+.summary-body strong{ color:var(--ink); font-weight:700; }
 .summary-body p{ margin:0 0 10px; }
 .summary-body .loading{ color:var(--ink-soft); font-style:italic; }
 .summary-body .err{ color:var(--danger); }
@@ -480,18 +485,53 @@ html, body{ margin:0; padding:0; }
 
         <!-- Vue en direct : transcription multi-participants -->
         <div id="reunionLive" class="reunion-live" style="display:none;">
-          <div class="mic-zone" style="padding:14px 0 8px;">
-            <div class="mic-wrap" style="width:72px; height:72px;">
-              <div class="ring" id="rRing1"></div><div class="ring" id="rRing2"></div>
-              <button id="rMicBtn" class="mic-btn mic-btn-sm">🎙</button>
+          <div class="mode-switch">
+            <button class="mode-btn active" data-rmode="transcript">🎙 Transcription</button>
+            <button class="mode-btn" data-rmode="amplify">🎧 Amplification</button>
+          </div>
+          <div class="wip" style="padding:6px 24px 0;">Les deux ne peuvent pas tourner en même temps — capter le micro pour les deux à la fois casse la reconnaissance vocale sur certains téléphones.</div>
+
+          <div id="rTranscriptMode">
+            <div class="mic-zone" style="padding:14px 0 8px;">
+              <div class="mic-wrap" style="width:72px; height:72px;">
+                <div class="ring" id="rRing1"></div><div class="ring" id="rRing2"></div>
+                <button id="rMicBtn" class="mic-btn mic-btn-sm">🎙</button>
+              </div>
+              <div class="hint" id="rHint">Touchez le nom de la personne qui parle, puis le micro.</div>
             </div>
-            <div class="hint" id="rHint">Touchez le nom de la personne qui parle, puis le micro.</div>
+
+            <div class="participant-chip-row" id="participantChipRow"></div>
+
+            <div class="transcript" id="rTranscript">
+              <div class="empty-state" id="rEmptyState"><b>Aucune prise de parole enregistrée.</b><br>Sélectionnez qui parle, puis démarrez le micro.</div>
+            </div>
           </div>
 
-          <div class="participant-chip-row" id="participantChipRow"></div>
-
-          <div class="transcript" id="rTranscript">
-            <div class="empty-state" id="rEmptyState"><b>Aucune prise de parole enregistrée.</b><br>Sélectionnez qui parle, puis démarrez le micro.</div>
+          <div id="rAmplifyMode" style="display:none; flex:1; flex-direction:column; min-height:0;">
+            <div class="eq" id="rEqBars">
+              <div class="bar" style="height:8%"></div><div class="bar" style="height:8%"></div><div class="bar" style="height:8%"></div>
+              <div class="bar" style="height:8%"></div><div class="bar" style="height:8%"></div><div class="bar" style="height:8%"></div><div class="bar" style="height:8%"></div>
+            </div>
+            <button id="rAmpliToggleBtn" class="btn-primary" style="margin:2px 16px 4px; flex:none;">🎧 Démarrer l'écoute amplifiée</button>
+            <div class="ampli-warning">Utilisez des écouteurs — au haut-parleur, le micro et la sortie audio trop proches provoquent un effet Larsen (sifflement).</div>
+            <div class="ampli-controls">
+              <div class="slider-row">
+                <div class="slider-label"><span>Amplification</span><span class="slider-val" id="rValGain">100%</span></div>
+                <input type="range" id="rSliderGain" min="0" max="250" value="100" class="audyo-slider">
+              </div>
+              <div class="slider-row">
+                <div class="slider-label"><span>Graves</span><span class="slider-val" id="rValBass">0 dB</span></div>
+                <input type="range" id="rSliderBass" min="-12" max="12" value="0" class="audyo-slider">
+              </div>
+              <div class="slider-row">
+                <div class="slider-label"><span>Médiums</span><span class="slider-val" id="rValMid">0 dB</span></div>
+                <input type="range" id="rSliderMid" min="-12" max="12" value="0" class="audyo-slider">
+              </div>
+              <div class="slider-row">
+                <div class="slider-label"><span>Aigus</span><span class="slider-val" id="rValTreble">0 dB</span></div>
+                <input type="range" id="rSliderTreble" min="-12" max="12" value="0" class="audyo-slider">
+              </div>
+            </div>
           </div>
 
           <div class="bottombar">
@@ -774,6 +814,29 @@ html, body{ margin:0; padding:0; }
   }));
 
   function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function markdownToDisplayHtml(md){
+    const lines = (md || '').split('\n').filter(Boolean);
+    let html = '', inList = false;
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      const heading = trimmed.match(/^#{1,6}\s*(.+)$/);
+      const bullet = trimmed.match(/^[-•]\s+(.+)$/);
+      if (heading){
+        if (inList){ html += '</ul>'; inList = false; }
+        html += '<h4>' + escapeHtml(heading[1].replace(/\*\*/g,'')) + '</h4>';
+      } else if (bullet){
+        if (!inList){ html += '<ul>'; inList = true; }
+        html += '<li>' + escapeHtml(bullet[1]).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') + '</li>';
+      } else {
+        if (inList){ html += '</ul>'; inList = false; }
+        html += '<p>' + escapeHtml(trimmed).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') + '</p>';
+      }
+    });
+    if (inList) html += '</ul>';
+    return html;
+  }
+
   function addBubble(speaker, text, isInterim){
     if (emptyState && emptyState.parentNode) emptyState.remove();
     const b = document.createElement('div');
@@ -854,7 +917,7 @@ html, body{ margin:0; padding:0; }
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Erreur backend');
-      summaryBody.innerHTML = data.summary.split('\\n').filter(Boolean).map(l => '<p>'+escapeHtml(l)+'</p>').join('');
+      summaryBody.innerHTML = markdownToDisplayHtml(data.summary);
       window.audyoSaveToHistory({
         kind: convMode === 'medical' ? 'rdv-medical' : 'conversation',
         title: (convMode === 'medical' ? 'RDV médical' : 'Conversation') + ' · ' + new Date().toLocaleDateString('fr-FR', { day:'2-digit', month:'short' }),
@@ -1245,6 +1308,45 @@ html, body{ margin:0; padding:0; }
   function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function initials(name){ return name.trim().split(/\\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase(); }
 
+  // Convertit le Markdown léger renvoyé par l'IA (titres #, gras **) en un
+  // affichage propre, plutôt que de montrer les symboles bruts à l'écran.
+  function markdownToDisplayHtml(md){
+    const lines = (md || '').split('\n').filter(Boolean);
+    let html = '', inList = false;
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      const heading = trimmed.match(/^#{1,6}\s*(.+)$/);
+      const bullet = trimmed.match(/^[-•]\s+(.+)$/);
+      if (heading){
+        if (inList){ html += '</ul>'; inList = false; }
+        html += '<h4>' + escapeHtml(heading[1].replace(/\*\*/g,'')) + '</h4>';
+      } else if (bullet){
+        if (!inList){ html += '<ul>'; inList = true; }
+        html += '<li>' + escapeHtml(bullet[1]).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') + '</li>';
+      } else {
+        if (inList){ html += '</ul>'; inList = false; }
+        html += '<p>' + escapeHtml(trimmed).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') + '</p>';
+      }
+    });
+    if (inList) html += '</ul>';
+    return html;
+  }
+
+  // Retire toute la mise en forme pour une lecture vocale agréable — sans ce
+  // nettoyage, la synthèse vocale marque une pause ou hésite sur chaque #, *
+  // ou guillemet, ce qui rend l'écoute désagréable.
+  function stripMarkdownForSpeech(md){
+    return (md || '')
+      .replace(/^#{1,6}\s*/gm, '')
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/\*(.+?)\*/g, '$1')
+      .replace(/^[-•]\s+/gm, '')
+      .replace(/`/g, '')
+      .replace(/["""«»]/g, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
+
   function renderParticipants(){
     participantList.innerHTML = '';
     participants.forEach(p => {
@@ -1391,6 +1493,114 @@ html, body{ margin:0; padding:0; }
   }
   rMicBtn.addEventListener('click', () => rListening ? rStopListening() : rStartListening());
 
+  // ---- Sélecteur de mode Transcription / Amplification (exclusifs) ----
+  const rTranscriptModeEl = document.getElementById('rTranscriptMode');
+  const rAmplifyModeEl = document.getElementById('rAmplifyMode');
+  const rModeBtns = document.querySelectorAll('.reunion-live [data-rmode]');
+
+  rModeBtns.forEach(btn => btn.addEventListener('click', () => {
+    rModeBtns.forEach(b => b.classList.toggle('active', b === btn));
+    const isAmplify = btn.dataset.rmode === 'amplify';
+    rTranscriptModeEl.style.display = isAmplify ? 'none' : 'block';
+    rAmplifyModeEl.style.display = isAmplify ? 'flex' : 'none';
+    if (isAmplify && rListening) rStopListening(); // libère le micro pour l'amplification
+    if (!isAmplify && rAmpliListening) rStopAmpli(); // libère le micro pour la reconnaissance vocale
+  }));
+
+  // ---- Amplification en direct (même logique que Écoute assistée, dupliquée
+  // ici car les deux écrans ne partagent pas leur état — voir dossier §3.2) ----
+  const rAmpliToggleBtn = document.getElementById('rAmpliToggleBtn');
+  const rGainSlider = document.getElementById('rSliderGain');
+  const rBassSlider = document.getElementById('rSliderBass');
+  const rMidSlider = document.getElementById('rSliderMid');
+  const rTrebleSlider = document.getElementById('rSliderTreble');
+  const rValGain = document.getElementById('rValGain');
+  const rValBass = document.getElementById('rValBass');
+  const rValMid = document.getElementById('rValMid');
+  const rValTreble = document.getElementById('rValTreble');
+  const rEqBars = document.querySelectorAll('#rEqBars .bar');
+
+  let rAmpliAudioCtx = null, rAmpliMicStream = null, rAmpliSourceNode = null, rAmpliGainNode = null;
+  let rAmpliBassFilter = null, rAmpliMidFilter = null, rAmpliTrebleFilter = null, rAmpliAnalyser = null;
+  let rAmpliListening = false, rAmpliRafId = null;
+
+  function rUpdateAmpliLabels(){
+    rValGain.textContent = rGainSlider.value + '%';
+    rValBass.textContent = (rBassSlider.value > 0 ? '+' : '') + rBassSlider.value + ' dB';
+    rValMid.textContent = (rMidSlider.value > 0 ? '+' : '') + rMidSlider.value + ' dB';
+    rValTreble.textContent = (rTrebleSlider.value > 0 ? '+' : '') + rTrebleSlider.value + ' dB';
+  }
+  [rGainSlider, rBassSlider, rMidSlider, rTrebleSlider].forEach(s => s.addEventListener('input', () => {
+    rUpdateAmpliLabels();
+    if (!rAmpliListening) return;
+    if (rAmpliGainNode) rAmpliGainNode.gain.value = rGainSlider.value / 100;
+    if (rAmpliBassFilter) rAmpliBassFilter.gain.value = parseFloat(rBassSlider.value);
+    if (rAmpliMidFilter) rAmpliMidFilter.gain.value = parseFloat(rMidSlider.value);
+    if (rAmpliTrebleFilter) rAmpliTrebleFilter.gain.value = parseFloat(rTrebleSlider.value);
+  }));
+  rUpdateAmpliLabels();
+
+  function rAnimateAmpliBars(){
+    const data = new Uint8Array(rAmpliAnalyser.frequencyBinCount);
+    function tick(){
+      rAmpliAnalyser.getByteFrequencyData(data);
+      const step = Math.floor(data.length / rEqBars.length);
+      rEqBars.forEach((bar, i) => {
+        const v = data[i * step] || 0;
+        bar.style.height = Math.max(8, (v / 255) * 100) + '%';
+      });
+      rAmpliRafId = requestAnimationFrame(tick);
+    }
+    tick();
+  }
+
+  async function rStartAmpli(){
+    try{ rAmpliMicStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:false, noiseSuppression:false } }); }
+    catch(e){ rAmpliToggleBtn.textContent = 'Accès micro refusé'; return; }
+
+    rAmpliAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    await rAmpliAudioCtx.resume();
+    rAmpliSourceNode = rAmpliAudioCtx.createMediaStreamSource(rAmpliMicStream);
+
+    rAmpliGainNode = rAmpliAudioCtx.createGain();
+    rAmpliGainNode.gain.value = rGainSlider.value / 100;
+
+    rAmpliBassFilter = rAmpliAudioCtx.createBiquadFilter();
+    rAmpliBassFilter.type = 'lowshelf'; rAmpliBassFilter.frequency.value = 250; rAmpliBassFilter.gain.value = parseFloat(rBassSlider.value);
+
+    rAmpliMidFilter = rAmpliAudioCtx.createBiquadFilter();
+    rAmpliMidFilter.type = 'peaking'; rAmpliMidFilter.frequency.value = 1500; rAmpliMidFilter.Q.value = 1; rAmpliMidFilter.gain.value = parseFloat(rMidSlider.value);
+
+    rAmpliTrebleFilter = rAmpliAudioCtx.createBiquadFilter();
+    rAmpliTrebleFilter.type = 'highshelf'; rAmpliTrebleFilter.frequency.value = 4000; rAmpliTrebleFilter.gain.value = parseFloat(rTrebleSlider.value);
+
+    rAmpliAnalyser = rAmpliAudioCtx.createAnalyser();
+    rAmpliAnalyser.fftSize = 64;
+
+    rAmpliSourceNode.connect(rAmpliGainNode);
+    rAmpliGainNode.connect(rAmpliBassFilter);
+    rAmpliBassFilter.connect(rAmpliMidFilter);
+    rAmpliMidFilter.connect(rAmpliTrebleFilter);
+    rAmpliTrebleFilter.connect(rAmpliAnalyser);
+    rAmpliAnalyser.connect(rAmpliAudioCtx.destination);
+
+    rAmpliListening = true;
+    rAmpliToggleBtn.textContent = "⏹ Arrêter l'écoute amplifiée";
+    rAmpliToggleBtn.classList.add('listening');
+    rAnimateAmpliBars();
+  }
+
+  function rStopAmpli(){
+    rAmpliListening = false;
+    if (rAmpliRafId) cancelAnimationFrame(rAmpliRafId);
+    if (rAmpliMicStream) rAmpliMicStream.getTracks().forEach(t => t.stop());
+    if (rAmpliAudioCtx) rAmpliAudioCtx.close();
+    rEqBars.forEach(bar => bar.style.height = '8%');
+    rAmpliToggleBtn.textContent = "🎧 Démarrer l'écoute amplifiée";
+    rAmpliToggleBtn.classList.remove('listening');
+  }
+  rAmpliToggleBtn.addEventListener('click', () => rAmpliListening ? rStopAmpli() : rStartAmpli());
+
   let rLastSummaryText = '';
 
   rCloseSummary.addEventListener('click', () => rSummaryPanel.classList.remove('open'));
@@ -1406,7 +1616,7 @@ html, body{ margin:0; padding:0; }
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Erreur backend');
       rLastSummaryText = data.summary;
-      rSummaryBody.innerHTML = data.summary.split('\\n').filter(Boolean).map(l => '<p>'+escapeHtml(l)+'</p>').join('');
+      rSummaryBody.innerHTML = markdownToDisplayHtml(data.summary);
       window.audyoSaveToHistory({
         kind: 'reunion',
         title: 'Réunion · ' + participants.map(p => p.name).join(', ').slice(0, 60),
@@ -1455,7 +1665,7 @@ html, body{ margin:0; padding:0; }
   rReadAloudBtn.addEventListener('click', () => {
     if (!rLastSummaryText || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(rLastSummaryText);
+    const utter = new SpeechSynthesisUtterance(stripMarkdownForSpeech(rLastSummaryText));
     utter.lang = 'fr-FR';
     const voice = pickVoice(rSelectedGender);
     if (voice) utter.voice = voice;
@@ -1499,9 +1709,9 @@ html, body{ margin:0; padding:0; }
   rSearchBtn.addEventListener('click', rRunSearch);
   rSearchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') rRunSearch(); });
 
-  // Coupe le micro si on quitte l'écran Réunion.
+  // Coupe le micro (transcription ou amplification) si on quitte l'écran Réunion.
   document.querySelectorAll('[data-goto], .tab').forEach(el => {
-    el.addEventListener('click', () => { if (rListening) rStopListening(); });
+    el.addEventListener('click', () => { if (rListening) rStopListening(); if (rAmpliListening) rStopAmpli(); });
   });
 
   renderParticipants();
