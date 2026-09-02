@@ -392,7 +392,7 @@ html, body{ margin:0; padding:0; }
           </div>
 
           <button id="ampliToggleBtn" class="btn-primary" style="margin:2px 16px 4px; flex:none;">🎧 Démarrer l'écoute amplifiée</button>
-          <div class="ampli-warning">Utilisez des écouteurs — au haut-parleur, le micro et la sortie audio trop proches provoquent un effet Larsen (sifflement).</div>
+          <div class="ampli-warning">Utilisez des écouteurs <strong>filaires</strong> de préférence — au haut-parleur, effet Larsen possible. Avec un casque <strong>Bluetooth</strong>, le son peut se couper après quelques secondes (limite du téléphone, pas de l'app) : redémarrez l'écoute ou reconnectez le casque si ça arrive.</div>
 
           <div class="ampli-controls" id="ampliControls">
             <div class="slider-row">
@@ -491,7 +491,7 @@ html, body{ margin:0; padding:0; }
           </div>
           <div class="wip" style="padding:6px 24px 0;">Les deux ne peuvent pas tourner en même temps — capter le micro pour les deux à la fois casse la reconnaissance vocale sur certains téléphones.</div>
 
-          <div id="rTranscriptMode">
+          <div id="rTranscriptMode" style="display:flex; flex-direction:column; flex:1; min-height:0;">
             <div class="mic-zone" style="padding:14px 0 8px;">
               <div class="mic-wrap" style="width:72px; height:72px;">
                 <div class="ring" id="rRing1"></div><div class="ring" id="rRing2"></div>
@@ -513,7 +513,7 @@ html, body{ margin:0; padding:0; }
               <div class="bar" style="height:8%"></div><div class="bar" style="height:8%"></div><div class="bar" style="height:8%"></div><div class="bar" style="height:8%"></div>
             </div>
             <button id="rAmpliToggleBtn" class="btn-primary" style="margin:2px 16px 4px; flex:none;">🎧 Démarrer l'écoute amplifiée</button>
-            <div class="ampli-warning">Utilisez des écouteurs — au haut-parleur, le micro et la sortie audio trop proches provoquent un effet Larsen (sifflement).</div>
+            <div class="ampli-warning">Utilisez des écouteurs <strong>filaires</strong> de préférence — au haut-parleur, effet Larsen possible. Avec un casque <strong>Bluetooth</strong>, le son peut se couper après quelques secondes (limite du téléphone, pas de l'app) : redémarrez l'écoute ou reconnectez le casque si ça arrive.</div>
             <div class="ampli-controls">
               <div class="slider-row">
                 <div class="slider-label"><span>Amplification</span><span class="slider-val" id="rValGain">100%</span></div>
@@ -1501,7 +1501,7 @@ html, body{ margin:0; padding:0; }
   rModeBtns.forEach(btn => btn.addEventListener('click', () => {
     rModeBtns.forEach(b => b.classList.toggle('active', b === btn));
     const isAmplify = btn.dataset.rmode === 'amplify';
-    rTranscriptModeEl.style.display = isAmplify ? 'none' : 'block';
+    rTranscriptModeEl.style.display = isAmplify ? 'none' : 'flex';
     rAmplifyModeEl.style.display = isAmplify ? 'flex' : 'none';
     if (isAmplify && rListening) rStopListening(); // libère le micro pour l'amplification
     if (!isAmplify && rAmpliListening) rStopAmpli(); // libère le micro pour la reconnaissance vocale
