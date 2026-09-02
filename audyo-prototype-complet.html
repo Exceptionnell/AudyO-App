@@ -1643,6 +1643,7 @@ html, body{ margin:0; padding:0; }
   rCloseSummary.addEventListener('click', () => rSummaryPanel.classList.remove('open'));
   rSummaryBtn.addEventListener('click', async () => {
     if (rSegments.length === 0) return;
+    if (rListening) rStopListening(); // libère le micro pour la conversation IA du compte-rendu
     rSummaryPanel.classList.add('open');
     rSummaryBody.innerHTML = '<p class="loading">Génération du compte-rendu…</p>';
     rChatHistory = [];
@@ -1748,7 +1749,7 @@ html, body{ margin:0; padding:0; }
     };
     recog.onerror = () => {};
     recog.onend = () => { rSearchListening = false; rSearchMicBtn.classList.remove('listening'); rSearchInput.focus(); };
-    try{ recog.start(); }catch(e){}
+    try{ recog.start(); }catch(e){ rSearchInput.placeholder = "Micro momentanément indisponible — réessayez."; }
   });
 
   async function rRunSearch(){
