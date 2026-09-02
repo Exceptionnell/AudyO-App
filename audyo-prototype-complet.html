@@ -153,6 +153,7 @@ html, body{ margin:0; padding:0; }
 .p-sample-btn.done{ background:var(--spk-b-bg); color:var(--spk-b); border-color:transparent; }
 .p-remove{ border:none; background:none; color:var(--ink-soft); opacity:.6; font-size:15px; cursor:pointer; padding:0 2px; flex-shrink:0; }
 .add-participant-row{ display:flex; gap:8px; padding:10px 16px; }
+.name-alert-row{ display:flex; gap:8px; padding:4px 16px 0; }
 .participant-input{ flex:1; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:12px; padding:9px 12px; font-family:'Plus Jakarta Sans',sans-serif; font-size:12.5px; }
 .participant-input::placeholder{ color:var(--ink-soft); }
 .add-btn{ border:none; background:var(--grad); color:var(--grad-ink); font-weight:700; font-size:12px; padding:0 16px; border-radius:12px; cursor:pointer; }
@@ -232,7 +233,9 @@ html, body{ margin:0; padding:0; }
 
 /* ---- Profils de sensibilité ---- */
 .profil-active-banner{ margin:14px 16px 4px; padding:10px 14px; background:var(--purple-bg); color:var(--purple); border-radius:12px; font-size:12.5px; font-weight:700; }
-.profil-list{ flex:1; overflow-y:auto; padding:10px 16px 16px; display:flex; flex-direction:column; gap:10px; }
+.profil-list{ padding:10px 16px 16px; display:flex; flex-direction:column; gap:10px; }
+.profil-adjust{ border-top:1px solid var(--line); padding-bottom:16px; }
+.screen[data-screen="profils"]{ overflow-y:auto; }
 .profil-card{ text-align:left; border:1.5px solid var(--line); background:var(--panel); border-radius:16px; padding:12px 14px; cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; }
 .profil-card.active{ border-color:var(--purple); background:var(--purple-bg); }
 .pc-top{ display:flex; justify-content:space-between; align-items:center; }
@@ -673,6 +676,28 @@ html, body{ margin:0; padding:0; }
             <div class="pc-desc">Amplification minimale, seules les alertes critiques restent actives.</div>
           </button>
         </div>
+
+        <div class="profil-adjust">
+          <div class="section-label" style="padding:4px 16px 0;">Réglages personnalisés du profil actif</div>
+          <div class="slider-row" style="padding:8px 16px 0;">
+            <div class="slider-label"><span>Amplification</span><span class="slider-val" id="pValGain">100%</span></div>
+            <input type="range" id="pSliderGain" min="0" max="250" value="100" class="audyo-slider">
+          </div>
+          <div class="slider-row" style="padding:8px 16px 0;">
+            <div class="slider-label"><span>Graves</span><span class="slider-val" id="pValBass">0 dB</span></div>
+            <input type="range" id="pSliderBass" min="-12" max="12" value="0" class="audyo-slider">
+          </div>
+          <div class="slider-row" style="padding:8px 16px 0;">
+            <div class="slider-label"><span>Médiums</span><span class="slider-val" id="pValMid">0 dB</span></div>
+            <input type="range" id="pSliderMid" min="-12" max="12" value="0" class="audyo-slider">
+          </div>
+          <div class="slider-row" style="padding:8px 16px 0;">
+            <div class="slider-label"><span>Aigus</span><span class="slider-val" id="pValTreble">0 dB</span></div>
+            <input type="range" id="pSliderTreble" min="-12" max="12" value="0" class="audyo-slider">
+          </div>
+          <button id="pResetBtn" class="btn-secondary" style="margin:10px 16px 16px; flex:none;">Réinitialiser ce profil</button>
+          <div class="detect-note">Ces réglages s'appliqueront automatiquement au démarrage de l'écoute amplifiée, tant que ce profil reste actif.</div>
+        </div>
       </div>
 
       <!-- ================= ALERTES INTELLIGENTES ================= -->
@@ -683,6 +708,17 @@ html, body{ margin:0; padding:0; }
           <button id="detectToggleBtn" class="btn-primary" style="flex:none;">🔎 Démarrer la détection de sons</button>
           <div class="detect-status" id="detectStatus">Détection à l'arrêt.</div>
           <div class="detect-note">Expérimental — reconnaissance générale de sons via un modèle d'IA (YAMNet, Google), tourne entièrement sur votre téléphone. Peut se tromper ou manquer des sons ; à affiner.</div>
+        </div>
+
+        <div class="name-alert-panel">
+          <div class="section-label" style="padding:10px 16px 4px;">Reconnaissance de mon prénom</div>
+          <div class="name-alert-row">
+            <input type="text" id="nameAlertInput" class="participant-input" placeholder="Votre prénom" style="flex:1;">
+            <button id="nameAlertSaveBtn" class="add-btn">Enregistrer</button>
+          </div>
+          <button id="nameListenToggleBtn" class="btn-primary" style="margin:8px 16px 4px; flex:none;" disabled>🎙 Écouter mon prénom</button>
+          <div class="detect-status" id="nameListenStatus">Enregistrez votre prénom pour activer l'écoute.</div>
+          <div class="detect-note">Détecte votre prénom prononcé à voix haute par reconnaissance vocale — fonctionne séparément de la détection de sons ci-dessus (un seul micro actif à la fois, l'un coupe l'autre).</div>
         </div>
 
         <div class="alert-list" id="alertList">
@@ -1280,12 +1316,93 @@ html, body{ margin:0; padding:0; }
   const label = document.getElementById('profilActifLabel');
   const NAMES = { reunion:'Réunion', transport:'Transport', famille:'En famille', urbain:'Urbain', nuit:'Nuit / Repos' };
 
+  // Valeurs par défaut de chaque profil, cohérentes avec leur description
+  // (dossier technique §3.7) — modifiables ensuite par l'utilisateur.
+  const DEFAULTS = {
+    reunion:   { gain:110, bass:-3, mid:2, treble:4 },
+    transport: { gain:160, bass:-6, mid:0, treble:3 },
+    famille:   { gain:120, bass:0,  mid:2, treble:2 },
+    urbain:    { gain:140, bass:-8, mid:0, treble:2 },
+    nuit:      { gain:60,  bass:0,  mid:0, treble:0 },
+  };
+  const STORAGE_KEY = 'audyo-sensitivity-profiles';
+
+  function loadCustom(){
+    try{ return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }catch(e){ return {}; }
+  }
+  function saveCustom(custom){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(custom)); }catch(e){}
+  }
+  let customSettings = loadCustom();
+
+  function settingsFor(profil){
+    return Object.assign({}, DEFAULTS[profil], customSettings[profil] || {});
+  }
+
+  let activeProfil = document.querySelector('.profil-card.active');
+  activeProfil = activeProfil ? activeProfil.dataset.profil : 'urbain';
+
+  const gainSlider = document.getElementById('pSliderGain');
+  const bassSlider = document.getElementById('pSliderBass');
+  const midSlider = document.getElementById('pSliderMid');
+  const trebleSlider = document.getElementById('pSliderTreble');
+  const valGain = document.getElementById('pValGain');
+  const valBass = document.getElementById('pValBass');
+  const valMid = document.getElementById('pValMid');
+  const valTreble = document.getElementById('pValTreble');
+  const resetBtn = document.getElementById('pResetBtn');
+
+  function refreshSliderLabels(){
+    valGain.textContent = gainSlider.value + '%';
+    valBass.textContent = (bassSlider.value > 0 ? '+' : '') + bassSlider.value + ' dB';
+    valMid.textContent = (midSlider.value > 0 ? '+' : '') + midSlider.value + ' dB';
+    valTreble.textContent = (trebleSlider.value > 0 ? '+' : '') + trebleSlider.value + ' dB';
+  }
+
+  function loadSlidersFor(profil){
+    const s = settingsFor(profil);
+    gainSlider.value = s.gain; bassSlider.value = s.bass; midSlider.value = s.mid; trebleSlider.value = s.treble;
+    refreshSliderLabels();
+  }
+  loadSlidersFor(activeProfil);
+
+  [gainSlider, bassSlider, midSlider, trebleSlider].forEach(s => s.addEventListener('input', () => {
+    refreshSliderLabels();
+    customSettings[activeProfil] = { gain:+gainSlider.value, bass:+bassSlider.value, mid:+midSlider.value, treble:+trebleSlider.value };
+    saveCustom(customSettings);
+  }));
+
+  resetBtn.addEventListener('click', () => {
+    delete customSettings[activeProfil];
+    saveCustom(customSettings);
+    loadSlidersFor(activeProfil);
+  });
+
   cards.forEach(card => {
     card.addEventListener('click', () => {
       cards.forEach(c => c.classList.toggle('active', c === card));
-      label.textContent = NAMES[card.dataset.profil] || card.dataset.profil;
+      activeProfil = card.dataset.profil;
+      label.textContent = NAMES[activeProfil] || activeProfil;
+      loadSlidersFor(activeProfil);
+      try{ localStorage.setItem('audyo-active-profile', activeProfil); }catch(e){}
     });
   });
+
+  // Restaure le profil actif d'une session à l'autre.
+  try{
+    const savedActive = localStorage.getItem('audyo-active-profile');
+    if (savedActive && DEFAULTS[savedActive]){
+      cards.forEach(c => c.classList.toggle('active', c.dataset.profil === savedActive));
+      activeProfil = savedActive;
+      label.textContent = NAMES[activeProfil] || activeProfil;
+      loadSlidersFor(activeProfil);
+    }
+  }catch(e){}
+
+  // Exposé pour que le module Écoute assistée applique ces réglages au démarrage.
+  window.audyoGetActiveSensitivitySettings = function(){
+    return settingsFor(activeProfil);
+  };
 })();
 
 // ==================== ALERTES INTELLIGENTES ====================
@@ -1840,6 +1957,13 @@ html, body{ margin:0; padding:0; }
   let bassFilter = null, midFilter = null, trebleFilter = null, analyser = null;
   let listening = false, rafId = null;
 
+  // Applique les réglages du profil de sensibilité actif (Réglages > Profils
+  // de sensibilité) comme point de départ, plutôt que des valeurs neutres fixes.
+  if (window.audyoGetActiveSensitivitySettings){
+    const s = window.audyoGetActiveSensitivitySettings();
+    gainSlider.value = s.gain; bassSlider.value = s.bass; midSlider.value = s.mid; trebleSlider.value = s.treble;
+  }
+
   function updateLabels(){
     valGain.textContent = gainSlider.value + '%';
     valBass.textContent = (bassSlider.value > 0 ? '+' : '') + bassSlider.value + ' dB';
@@ -2050,6 +2174,92 @@ html, body{ margin:0; padding:0; }
   });
 })();
 
+// ==================== ALERTES — RECONNAISSANCE DE MON PRÉNOM ====================
+(function(){
+  const nameInput = document.getElementById('nameAlertInput');
+  const saveBtn = document.getElementById('nameAlertSaveBtn');
+  const listenBtn = document.getElementById('nameListenToggleBtn');
+  const listenStatus = document.getElementById('nameListenStatus');
+  if (!nameInput || !listenBtn) return;
+
+  const STORAGE_KEY = 'audyo-user-firstname';
+  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let savedName = '';
+  let listening = false, recognition = null;
+
+  // Normalise pour comparer sans se soucier des accents/majuscules — la
+  // reconnaissance vocale orthographie parfois un prénom différemment
+  // (ex. "Éléa" transcrit "Elea").
+  function normalize(s){
+    return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  }
+
+  function loadSavedName(){
+    try{ savedName = localStorage.getItem(STORAGE_KEY) || ''; }catch(e){ savedName = ''; }
+    if (savedName){
+      nameInput.value = savedName;
+      listenBtn.disabled = false;
+      listenStatus.textContent = 'Prénom enregistré : ' + savedName + '. Prêt à écouter.';
+    } else {
+      listenBtn.disabled = true;
+      listenStatus.textContent = "Enregistrez votre prénom pour activer l'écoute.";
+    }
+  }
+  loadSavedName();
+
+  saveBtn.addEventListener('click', () => {
+    const name = nameInput.value.trim();
+    if (!name) return;
+    try{ localStorage.setItem(STORAGE_KEY, name); }catch(e){}
+    savedName = name;
+    listenBtn.disabled = false;
+    listenStatus.textContent = 'Prénom enregistré : ' + name + '. Prêt à écouter.';
+  });
+
+  function startListening(){
+    if (!SpeechRecognitionImpl){ listenStatus.textContent = "Reconnaissance vocale indisponible ici — utilisez Chrome ou Edge."; return; }
+    if (!savedName) return;
+    // Un seul micro à la fois : on coupe la détection de sons générale si elle tournait.
+    if (window.audyoStopSoundDetection) window.audyoStopSoundDetection();
+
+    recognition = new SpeechRecognitionImpl();
+    recognition.lang = 'fr-FR'; recognition.continuous = false; recognition.interimResults = false;
+    recognition.onresult = (event) => {
+      for (let i = event.resultIndex; i < event.results.length; i++){
+        const text = event.results[i][0].transcript || '';
+        if (normalize(text).includes(normalize(savedName))){
+          listenStatus.textContent = '🔔 Prénom détecté : "' + text.trim() + '"';
+          listenStatus.classList.add('hit');
+          if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+          setTimeout(() => listenStatus.classList.remove('hit'), 2500);
+        }
+      }
+    };
+    recognition.onerror = (e) => {
+      if (e.error === 'not-allowed'){ listenStatus.textContent = "Accès micro refusé."; stopListening(); return; }
+    };
+    recognition.onend = () => { if (listening){ try{ recognition.start(); }catch(e){} } };
+    recognition.start();
+    listening = true;
+    listenBtn.textContent = "⏹ Arrêter l'écoute";
+    listenStatus.textContent = 'Écoute active — dites "' + savedName + '" pour tester.';
+  }
+
+  function stopListening(){
+    listening = false;
+    if (recognition){ recognition.onend = null; recognition.stop(); }
+    listenBtn.textContent = '🎙 Écouter mon prénom';
+    listenStatus.textContent = savedName ? ('Prénom enregistré : ' + savedName + '. Prêt à écouter.') : "Enregistrez votre prénom pour activer l'écoute.";
+  }
+
+  listenBtn.addEventListener('click', () => listening ? stopListening() : startListening());
+  window.audyoStopNameListening = stopListening;
+
+  document.querySelectorAll('[data-goto], .tab').forEach(el => {
+    el.addEventListener('click', () => { if (listening) stopListening(); });
+  });
+})();
+
 // ==================== ALERTES — DÉTECTION DE SONS EN DIRECT (YAMNet / TensorFlow.js) ====================
 (function(){
   const toggleBtn = document.getElementById('detectToggleBtn');
@@ -2179,6 +2389,7 @@ html, body{ margin:0; padding:0; }
 
   async function startDetection(){
     toggleBtn.disabled = true;
+    if (window.audyoStopNameListening) window.audyoStopNameListening(); // un seul micro à la fois
     try{
       await ensureModel();
     }catch(err){
@@ -2232,6 +2443,7 @@ html, body{ margin:0; padding:0; }
   }
 
   toggleBtn.addEventListener('click', () => detecting ? stopDetection() : startDetection());
+  window.audyoStopSoundDetection = stopDetection;
 
   document.querySelectorAll('[data-goto], .tab').forEach(el => {
     el.addEventListener('click', () => { if (detecting) stopDetection(); });
