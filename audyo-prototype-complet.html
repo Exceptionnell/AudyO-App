@@ -189,6 +189,11 @@ html, body{ margin:0; padding:0; }
 .search-input::placeholder{ color:var(--ink-soft); }
 .search-go-btn{ border:none; background:var(--grad); color:var(--grad-ink); width:38px; border-radius:12px; cursor:pointer; font-size:14px; }
 .hist-search-answer{ margin:0 16px 12px; background:var(--amber-bg); border:1px solid rgba(255,181,98,0.3); border-radius:12px; padding:11px 13px; font-size:12px; line-height:1.5; color:var(--ink); }
+.voice-read-row{ display:flex; gap:6px; padding:12px 18px 0; flex-wrap:wrap; }
+.voice-gender-btn{ border:1px solid var(--line); background:var(--panel); color:var(--ink-soft); font-size:11px; font-weight:700; padding:8px 10px; border-radius:12px; cursor:pointer; }
+.voice-gender-btn.active{ background:var(--spk-b-bg); color:var(--spk-b); border-color:transparent; }
+#rSummaryPanel .search-row{ padding-left:18px; padding-right:18px; }
+#rSummaryPanel .hist-search-answer{ margin-left:18px; margin-right:18px; }
 .hist-search-answer .lbl{ display:block; font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:var(--amber); margin-bottom:4px; }
 .hist-list{ flex:1; overflow-y:auto; padding:4px 0 12px; }
 .hist-item{ padding:12px 18px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; cursor:pointer; }
@@ -497,6 +502,18 @@ html, body{ margin:0; padding:0; }
           <div class="summary-panel" id="rSummaryPanel">
             <div class="summary-header"><h3>Compte-rendu de réunion</h3><button id="rCloseSummary">✕</button></div>
             <div class="summary-body" id="rSummaryBody"></div>
+
+            <div class="voice-read-row">
+              <button class="voice-gender-btn active" id="rVoiceMale" data-gender="male">🚹 Voix homme</button>
+              <button class="voice-gender-btn" id="rVoiceFemale" data-gender="female">🚺 Voix femme</button>
+              <button class="btn-primary" id="rReadAloudBtn" style="flex:none; padding:9px 16px;">🔊 Lire à voix haute</button>
+            </div>
+
+            <div class="search-row" style="padding-top:10px; border-top:1px solid var(--line); margin-top:6px;">
+              <input type="text" id="rSearchInput" class="search-input" placeholder="Poser une question sur cette réunion…">
+              <button id="rSearchBtn" class="search-go-btn">🔍</button>
+            </div>
+            <div id="rSearchAnswer" class="hist-search-answer" style="display:none;"></div>
           </div>
         </div>
       </div>
@@ -1374,6 +1391,8 @@ html, body{ margin:0; padding:0; }
   }
   rMicBtn.addEventListener('click', () => rListening ? rStopListening() : rStartListening());
 
+  let rLastSummaryText = '';
+
   rCloseSummary.addEventListener('click', () => rSummaryPanel.classList.remove('open'));
   rSummaryBtn.addEventListener('click', async () => {
     if (rSegments.length === 0) return;
@@ -1386,6 +1405,7 @@ html, body{ margin:0; padding:0; }
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Erreur backend');
+      rLastSummaryText = data.summary;
       rSummaryBody.innerHTML = data.summary.split('\\n').filter(Boolean).map(l => '<p>'+escapeHtml(l)+'</p>').join('');
       window.audyoSaveToHistory({
         kind: 'reunion',
@@ -1397,6 +1417,87 @@ html, body{ margin:0; padding:0; }
       rSummaryBody.innerHTML = '<p class="err">Le résumé n\'a pas pu être généré (' + escapeHtml(err.message || '') + '). Vérifiez que le backend tourne bien sur ' + BACKEND_URL + '.</p>';
     }
   });
+
+  // ---- Lecture vocale du compte-rendu, avec choix Homme / Femme ----
+  const rVoiceMaleBtn = document.getElementById('rVoiceMale');
+  const rVoiceFemaleBtn = document.getElementById('rVoiceFemale');
+  const rReadAloudBtn = document.getElementById('rReadAloudBtn');
+  let rSelectedGender = 'male';
+
+  rVoiceMaleBtn.addEventListener('click', () => {
+    rSelectedGender = 'male';
+    rVoiceMaleBtn.classList.add('active'); rVoiceFemaleBtn.classList.remove('active');
+  });
+  rVoiceFemaleBtn.addEventListener('click', () => {
+    rSelectedGender = 'female';
+    rVoiceFemaleBtn.classList.add('active'); rVoiceMaleBtn.classList.remove('active');
+  });
+
+  // Le navigateur ne fournit pas de vraie information de genre pour les voix
+  // de synthèse — on approche au mieux par le nom de la voix (peut varier
+  // selon l'appareil/le système ; à défaut de correspondance, on retombe sur
+  // une voix française disponible plutôt que d'échouer).
+  const FEMALE_NAME_HINTS = ['female', 'femme', 'amelie', 'amélie', 'marie', 'audrey', 'celine', 'céline', 'julie', 'lea', 'léa', 'charlotte', 'women', 'zira', 'hortense'];
+  const MALE_NAME_HINTS = ['male', 'homme', 'thomas', 'nicolas', 'paul', 'daniel', 'henri', 'guillaume', 'men'];
+
+  function pickVoice(gender){
+    if (!window.speechSynthesis) return null;
+    const voices = window.speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('fr'));
+    if (voices.length === 0) return null;
+    const hints = gender === 'female' ? FEMALE_NAME_HINTS : MALE_NAME_HINTS;
+    const match = voices.find(v => hints.some(h => v.name.toLowerCase().includes(h)));
+    if (match) return match;
+    // Pas de correspondance fiable : on répartit simplement entre les voix
+    // disponibles pour que "Homme" et "Femme" donnent au moins des voix différentes.
+    return gender === 'female' ? (voices[1] || voices[0]) : voices[0];
+  }
+
+  rReadAloudBtn.addEventListener('click', () => {
+    if (!rLastSummaryText || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(rLastSummaryText);
+    utter.lang = 'fr-FR';
+    const voice = pickVoice(rSelectedGender);
+    if (voice) utter.voice = voice;
+    rReadAloudBtn.textContent = '⏹ Arrêter la lecture';
+    utter.onend = () => { rReadAloudBtn.textContent = '🔊 Lire à voix haute'; };
+    utter.onerror = () => { rReadAloudBtn.textContent = '🔊 Lire à voix haute'; };
+    window.speechSynthesis.speak(utter);
+  });
+  // Certains navigateurs chargent la liste des voix de façon asynchrone.
+  if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = () => {};
+
+  // ---- Recherche IA dans le contenu de cette réunion ----
+  const rSearchInput = document.getElementById('rSearchInput');
+  const rSearchBtn = document.getElementById('rSearchBtn');
+  const rSearchAnswer = document.getElementById('rSearchAnswer');
+
+  async function rRunSearch(){
+    const query = rSearchInput.value.trim();
+    if (!query) return;
+    if (rSegments.length === 0){
+      rSearchAnswer.style.display = 'block';
+      rSearchAnswer.innerHTML = '<span class="lbl">Réponse</span>Aucun contenu de réunion à interroger pour l\'instant.';
+      return;
+    }
+    rSearchAnswer.style.display = 'block';
+    rSearchAnswer.innerHTML = '<span class="lbl">Réponse</span>Recherche en cours…';
+    const transcriptText = rSegments.map(s => s.participant + ': ' + s.text).join('\n') +
+      (rLastSummaryText ? ('\n\nRésumé :\n' + rLastSummaryText) : '');
+    try{
+      const response = await fetch(BACKEND_URL + '/v1/search', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ query, transcript: transcriptText })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Erreur backend');
+      rSearchAnswer.innerHTML = '<span class="lbl">Réponse</span>' + escapeHtml(data.answer);
+    }catch(err){
+      rSearchAnswer.innerHTML = '<span class="lbl">Réponse</span>Recherche indisponible (' + escapeHtml(err.message || '') + ').';
+    }
+  }
+  rSearchBtn.addEventListener('click', rRunSearch);
+  rSearchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') rRunSearch(); });
 
   // Coupe le micro si on quitte l'écran Réunion.
   document.querySelectorAll('[data-goto], .tab').forEach(el => {
