@@ -943,8 +943,13 @@ html, body{ margin:0; padding:0; }
       // navigateur (WebM) n'est pas le même que celui attendu par le service
       // en mode compressé (Ogg), ce qui provoquait une fermeture immédiate
       // et silencieuse de la connexion.
+      //
+      // Détection ouverte, sans restriction à deux langues précises : le
+      // modèle peut détecter n'importe laquelle de ses langues nativement
+      // supportées, pas seulement les deux choisies dans les menus.
       const wsUrl = 'wss://streaming.assemblyai.com/v3/ws?token=' + encodeURIComponent(token) +
-        '&speech_model=universal-3-5-pro&language_detection=true&encoding=pcm_s16le&sample_rate=16000';
+        '&speech_model=universal-3-5-pro&language_detection=true' +
+        '&encoding=pcm_s16le&sample_rate=16000';
       tSocket = new WebSocket(wsUrl);
       tSocket.binaryType = 'arraybuffer';
 
@@ -1075,7 +1080,15 @@ html, body{ margin:0; padding:0; }
     if (tInterimRow){ row = tInterimRow; row.className = 'trow'; tInterimRow = null; }
     else { if (tEmptyState && tEmptyState.parentNode) tEmptyState.remove(); row = document.createElement('div'); row.className = 'trow'; }
 
-    const detectedFull = shortToFull(shortLangCode) || sourceSel.value;
+    let detectedFull = shortToFull(shortLangCode) || sourceSel.value;
+    // Filet de sécurité : si la langue détectée ne correspond à aucune des
+    // deux langues choisies pour cette conversation (ne devrait plus arriver
+    // avec le paramètre language_codes, mais gardé par prudence), on retombe
+    // sur la langue source par défaut plutôt que de produire une traduction
+    // incohérente.
+    if (detectedFull !== sourceSel.value && detectedFull !== targetSel.value){
+      detectedFull = sourceSel.value;
+    }
     const targetFull = detectedFull === sourceSel.value ? targetSel.value : sourceSel.value;
 
     row.innerHTML =
@@ -1445,6 +1458,7 @@ html, body{ margin:0; padding:0; }
     catch(e){ toggleBtn.textContent = 'Accès micro refusé'; return; }
 
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    await audioCtx.resume(); // certains navigateurs créent le contexte suspendu après un await (ici, la demande micro) — sans ce réveil explicite, le son est traité mais jamais réellement diffusé.
     sourceNode = audioCtx.createMediaStreamSource(micStream);
 
     gainNode = audioCtx.createGain();
@@ -1763,6 +1777,7 @@ html, body{ margin:0; padding:0; }
       return;
     }
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    await audioCtx.resume(); // voir note du module Amplification : évite un contexte resté suspendu après l'await de getUserMedia.
     nativeSampleRate = audioCtx.sampleRate;
     sourceNode = audioCtx.createMediaStreamSource(micStream);
     processor = audioCtx.createScriptProcessor(4096, 1, 1);
