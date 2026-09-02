@@ -195,6 +195,12 @@ html, body{ margin:0; padding:0; }
 .search-go-btn{ border:none; background:var(--grad); color:var(--grad-ink); width:38px; border-radius:12px; cursor:pointer; font-size:14px; }
 .hist-search-answer{ margin:0 16px 12px; background:var(--amber-bg); border:1px solid rgba(255,181,98,0.3); border-radius:12px; padding:11px 13px; font-size:12px; line-height:1.5; color:var(--ink); }
 .voice-read-row{ display:flex; gap:6px; padding:12px 18px 0; flex-wrap:wrap; }
+.chat-thread{ display:flex; flex-direction:column; gap:8px; padding:10px 18px 16px; max-height:220px; overflow-y:auto; }
+.chat-msg{ max-width:88%; padding:8px 12px; border-radius:14px; font-size:12px; line-height:1.45; }
+.chat-msg.q{ align-self:flex-end; background:var(--spk-b-bg); color:var(--spk-b); border-bottom-right-radius:4px; }
+.chat-msg.a{ align-self:flex-start; background:var(--amber-bg); color:var(--ink); border-bottom-left-radius:4px; }
+.chat-msg.a.loading{ color:var(--ink-soft); font-style:italic; }
+.chat-msg.a.err{ color:var(--danger); }
 .voice-gender-btn{ border:1px solid var(--line); background:var(--panel); color:var(--ink-soft); font-size:11px; font-weight:700; padding:8px 10px; border-radius:12px; cursor:pointer; }
 .voice-gender-btn.active{ background:var(--spk-b-bg); color:var(--spk-b); border-color:transparent; }
 #rSummaryPanel .search-row{ padding-left:18px; padding-right:18px; }
@@ -550,10 +556,11 @@ html, body{ margin:0; padding:0; }
             </div>
 
             <div class="search-row" style="padding-top:10px; border-top:1px solid var(--line); margin-top:6px;">
+              <button id="rSearchMicBtn" class="mic-btn" style="width:38px; height:38px; font-size:15px; flex:none;">🎙</button>
               <input type="text" id="rSearchInput" class="search-input" placeholder="Poser une question sur cette réunion…">
               <button id="rSearchBtn" class="search-go-btn">🔍</button>
             </div>
-            <div id="rSearchAnswer" class="hist-search-answer" style="display:none;"></div>
+            <div id="rChatThread" class="chat-thread"></div>
           </div>
         </div>
       </div>
@@ -769,12 +776,29 @@ html, body{ margin:0; padding:0; }
   // pour ne jamais bloquer l'affichage du résumé si la sauvegarde échoue.
   window.audyoSaveToHistory = async function(entry){
     try{
-      await fetch('https://audyo-backend.onrender.com/v1/history', {
+      const response = await fetch('https://audyo-backend.onrender.com/v1/history', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ deviceId: window.audyoDeviceId, ...entry })
       });
+      const data = await response.json().catch(() => null);
+      return data && data.id ? data.id : null;
     }catch(e){
       console.warn('Sauvegarde historique échouée :', e);
+      return null;
+    }
+  };
+
+  // Met à jour une entrée déjà sauvegardée (ex. pour y ajouter une conversation
+  // de suivi posée après coup sur un compte-rendu déjà enregistré).
+  window.audyoUpdateHistory = async function(id, fields){
+    if (!id) return;
+    try{
+      await fetch('https://audyo-backend.onrender.com/v1/history/' + id + '?deviceId=' + encodeURIComponent(window.audyoDeviceId), {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(fields)
+      });
+    }catch(e){
+      console.warn('Mise à jour historique échouée :', e);
     }
   };
 
@@ -1301,6 +1325,7 @@ html, body{ margin:0; padding:0; }
   const rSummaryBtn = document.getElementById('rSummaryBtn');
   const rSummaryPanel = document.getElementById('rSummaryPanel');
   const rSummaryBody = document.getElementById('rSummaryBody');
+  const rChatThread = document.getElementById('rChatThread');
   const rCloseSummary = document.getElementById('rCloseSummary');
 
   let participants = []; // { id, name, color, hasSample }
@@ -1612,12 +1637,17 @@ html, body{ margin:0; padding:0; }
   rAmpliToggleBtn.addEventListener('click', () => rAmpliListening ? rStopAmpli() : rStartAmpli());
 
   let rLastSummaryText = '';
+  let rCurrentHistoryId = null;
+  let rChatHistory = [];
 
   rCloseSummary.addEventListener('click', () => rSummaryPanel.classList.remove('open'));
   rSummaryBtn.addEventListener('click', async () => {
     if (rSegments.length === 0) return;
     rSummaryPanel.classList.add('open');
     rSummaryBody.innerHTML = '<p class="loading">Génération du compte-rendu…</p>';
+    rChatHistory = [];
+    rChatThread.innerHTML = '';
+    rCurrentHistoryId = null;
     try{
       const response = await fetch(BACKEND_URL + '/v1/conversations/summary', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -1627,10 +1657,10 @@ html, body{ margin:0; padding:0; }
       if (!response.ok) throw new Error(data.error || 'Erreur backend');
       rLastSummaryText = data.summary;
       rSummaryBody.innerHTML = markdownToDisplayHtml(data.summary);
-      window.audyoSaveToHistory({
+      rCurrentHistoryId = await window.audyoSaveToHistory({
         kind: 'reunion',
         title: 'Réunion · ' + participants.map(p => p.name).join(', ').slice(0, 60),
-        transcript: rSegments,
+        transcript: { segments: rSegments, chat: rChatHistory },
         summary: data.summary,
       });
     }catch(err){
@@ -1687,33 +1717,84 @@ html, body{ margin:0; padding:0; }
   // Certains navigateurs chargent la liste des voix de façon asynchrone.
   if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = () => {};
 
-  // ---- Recherche IA dans le contenu de cette réunion ----
+  // ---- Conversation avec l'IA sur le contenu de cette réunion ----
   const rSearchInput = document.getElementById('rSearchInput');
   const rSearchBtn = document.getElementById('rSearchBtn');
-  const rSearchAnswer = document.getElementById('rSearchAnswer');
+  const rSearchMicBtn = document.getElementById('rSearchMicBtn');
+  const SearchRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rSearchListening = false;
+
+  function rAddChatMessage(role, text, extraClass){
+    const el = document.createElement('div');
+    el.className = 'chat-msg ' + role + (extraClass ? ' ' + extraClass : '');
+    el.textContent = text;
+    rChatThread.appendChild(el);
+    rChatThread.scrollTop = rChatThread.scrollHeight;
+    return el;
+  }
+
+  // Micro pour dicter la question — remplit le champ de texte, ne l'envoie
+  // jamais automatiquement : l'utilisateur relit et valide lui-même.
+  rSearchMicBtn.addEventListener('click', () => {
+    if (!SearchRecognitionImpl){ rSearchInput.placeholder = "Reconnaissance vocale indisponible ici."; return; }
+    if (rSearchListening) return;
+    const recog = new SearchRecognitionImpl();
+    recog.lang = 'fr-FR'; recog.continuous = false; recog.interimResults = true;
+    recog.onstart = () => { rSearchListening = true; rSearchMicBtn.classList.add('listening'); };
+    recog.onresult = (event) => {
+      let text = '';
+      for (let i = 0; i < event.results.length; i++) text += event.results[i][0].transcript;
+      rSearchInput.value = text;
+    };
+    recog.onerror = () => {};
+    recog.onend = () => { rSearchListening = false; rSearchMicBtn.classList.remove('listening'); rSearchInput.focus(); };
+    try{ recog.start(); }catch(e){}
+  });
 
   async function rRunSearch(){
     const query = rSearchInput.value.trim();
     if (!query) return;
     if (rSegments.length === 0){
-      rSearchAnswer.style.display = 'block';
-      rSearchAnswer.innerHTML = '<span class="lbl">Réponse</span>Aucun contenu de réunion à interroger pour l\'instant.';
+      rAddChatMessage('a', "Aucun contenu de réunion à interroger pour l'instant.", 'err');
       return;
     }
-    rSearchAnswer.style.display = 'block';
-    rSearchAnswer.innerHTML = '<span class="lbl">Réponse</span>Recherche en cours…';
+    rSearchInput.value = '';
+    rAddChatMessage('q', query);
+    const loadingEl = rAddChatMessage('a', 'Recherche en cours…', 'loading');
+
     const transcriptText = rSegments.map(s => s.participant + ': ' + s.text).join('\n') +
       (rLastSummaryText ? ('\n\nRésumé :\n' + rLastSummaryText) : '');
     try{
       const response = await fetch(BACKEND_URL + '/v1/search', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ query, transcript: transcriptText })
+        body: JSON.stringify({ query, transcript: transcriptText, history: rChatHistory })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Erreur backend');
-      rSearchAnswer.innerHTML = '<span class="lbl">Réponse</span>' + escapeHtml(data.answer);
+
+      loadingEl.classList.remove('loading');
+      loadingEl.textContent = data.answer;
+      rChatHistory.push({ question: query, answer: data.answer });
+
+      // Lecture vocale automatique de la réponse, avec la voix Homme/Femme choisie plus haut.
+      if (window.speechSynthesis){
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(data.answer);
+        utter.lang = 'fr-FR';
+        const voice = pickVoice(rSelectedGender);
+        if (voice) utter.voice = voice;
+        window.speechSynthesis.speak(utter);
+      }
+
+      // La conversation fait désormais partie du compte-rendu sauvegardé.
+      window.audyoUpdateHistory(rCurrentHistoryId, {
+        transcript: { segments: rSegments, chat: rChatHistory },
+        summary: rLastSummaryText,
+      });
     }catch(err){
-      rSearchAnswer.innerHTML = '<span class="lbl">Réponse</span>Recherche indisponible (' + escapeHtml(err.message || '') + ').';
+      loadingEl.classList.remove('loading');
+      loadingEl.classList.add('err');
+      loadingEl.textContent = 'Recherche indisponible (' + (err.message || '') + ').';
     }
   }
   rSearchBtn.addEventListener('click', rRunSearch);
