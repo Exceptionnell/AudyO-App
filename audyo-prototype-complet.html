@@ -582,6 +582,13 @@ html, body{ margin:0; padding:0; }
         <div id="histDetailPanel" class="summary-panel">
           <div class="summary-header"><h3 id="histDetailTitle">Détail</h3><button id="histDetailClose">✕</button></div>
           <div class="summary-body" id="histDetailBody"></div>
+
+          <div class="search-row" style="padding-top:10px; border-top:1px solid var(--line); margin-top:6px;">
+            <button id="histSearchMicBtn" class="mic-btn" style="width:38px; height:38px; font-size:15px; flex:none;">🎙</button>
+            <input type="text" id="histDetailSearchInput" class="search-input" placeholder="Poser une question sur cet échange…">
+            <button id="histDetailSearchBtn" class="search-go-btn">🔍</button>
+          </div>
+          <div id="histDetailChatThread" class="chat-thread"></div>
         </div>
       </div>
 
@@ -1703,11 +1710,17 @@ html, body{ margin:0; padding:0; }
     return gender === 'female' ? (voices[1] || voices[0]) : voices[0];
   }
 
+  // Beaucoup de téléphones n'ont qu'une seule voix française installée : sans
+  // ce réglage de hauteur, "Homme" et "Femme" peuvent retomber sur exactement
+  // la même voix par défaut, sans aucune différence audible.
+  function genderPitch(gender){ return gender === 'female' ? 1.25 : 0.8; }
+
   rReadAloudBtn.addEventListener('click', () => {
     if (!rLastSummaryText || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(stripMarkdownForSpeech(rLastSummaryText));
     utter.lang = 'fr-FR';
+    utter.pitch = genderPitch(rSelectedGender);
     const voice = pickVoice(rSelectedGender);
     if (voice) utter.voice = voice;
     rReadAloudBtn.textContent = '⏹ Arrêter la lecture';
@@ -1782,6 +1795,7 @@ html, body{ margin:0; padding:0; }
         window.speechSynthesis.cancel();
         const utter = new SpeechSynthesisUtterance(data.answer);
         utter.lang = 'fr-FR';
+        utter.pitch = genderPitch(rSelectedGender);
         const voice = pickVoice(rSelectedGender);
         if (voice) utter.voice = voice;
         window.speechSynthesis.speak(utter);
@@ -2276,21 +2290,116 @@ html, body{ margin:0; padding:0; }
     });
   }
 
+  let histDetailId = null;
+  let histDetailTranscriptText = '';
+  let histDetailSummary = '';
+  let histDetailChatHistory = [];
+  let histDetailOriginalSegments = [];
+
+  const histDetailChatThread = document.getElementById('histDetailChatThread');
+  const histDetailSearchInput = document.getElementById('histDetailSearchInput');
+  const histDetailSearchBtn = document.getElementById('histDetailSearchBtn');
+  const histSearchMicBtn = document.getElementById('histSearchMicBtn');
+
+  function buildTranscriptText(rawTranscript){
+    if (!rawTranscript) return '';
+    // Le transcript peut être un ancien format (tableau brut de segments) ou
+    // le nouveau format { segments, chat } — on gère les deux pour rester
+    // compatible avec les entrées déjà enregistrées avant cet ajout.
+    const segments = Array.isArray(rawTranscript) ? rawTranscript : (rawTranscript.segments || []);
+    return segments.map(s => {
+      const label = s.participant || (typeof s.speaker === 'string' ? s.speaker : 'Locuteur ' + ((s.speaker ?? 0) + 1));
+      return label + ': ' + (s.text || s.source || '');
+    }).join('\n');
+  }
+
+  function renderHistDetailChat(){
+    histDetailChatThread.innerHTML = '';
+    histDetailChatHistory.forEach(h => {
+      const q = document.createElement('div'); q.className = 'chat-msg q'; q.textContent = h.question;
+      const a = document.createElement('div'); a.className = 'chat-msg a'; a.textContent = h.answer;
+      histDetailChatThread.appendChild(q); histDetailChatThread.appendChild(a);
+    });
+    histDetailChatThread.scrollTop = histDetailChatThread.scrollHeight;
+  }
+
   async function openDetail(entry){
     detailTitle.textContent = KIND_LABELS[entry.kind] || entry.title;
     detailBody.innerHTML = '<p class="loading">Chargement…</p>';
     detailPanel.classList.add('open');
+    histDetailId = entry.id;
+    histDetailChatHistory = [];
+    histDetailChatThread.innerHTML = '';
+    histDetailSearchInput.value = '';
     try{
       const response = await fetch(BACKEND_URL + '/v1/history/' + entry.id + '?deviceId=' + encodeURIComponent(window.audyoDeviceId));
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Erreur backend');
       const summaryHtml = (data.summary || '').split('\\n').filter(Boolean).map(l => '<p>' + escapeHtml(l) + '</p>').join('');
       detailBody.innerHTML = summaryHtml || '<p class="loading">Pas de résumé enregistré pour cette entrée.</p>';
+
+      histDetailSummary = data.summary || '';
+      histDetailTranscriptText = buildTranscriptText(data.transcript);
+      histDetailOriginalSegments = Array.isArray(data.transcript) ? data.transcript : ((data.transcript && data.transcript.segments) || []);
+      const rawChat = (data.transcript && !Array.isArray(data.transcript) && data.transcript.chat) || [];
+      histDetailChatHistory = rawChat;
+      renderHistDetailChat();
     }catch(err){
       detailBody.innerHTML = '<p class="err">Impossible de charger le détail (' + escapeHtml(err.message || '') + ').</p>';
     }
   }
   detailClose.addEventListener('click', () => detailPanel.classList.remove('open'));
+
+  // ---- Micro pour dicter la question (remplit le champ, n'envoie jamais seul) ----
+  const HistSearchRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+  histSearchMicBtn.addEventListener('click', () => {
+    if (!HistSearchRecognitionImpl){ histDetailSearchInput.placeholder = "Reconnaissance vocale indisponible ici."; return; }
+    const recog = new HistSearchRecognitionImpl();
+    recog.lang = 'fr-FR'; recog.continuous = false; recog.interimResults = true;
+    recog.onstart = () => histSearchMicBtn.classList.add('listening');
+    recog.onresult = (event) => {
+      let text = '';
+      for (let i = 0; i < event.results.length; i++) text += event.results[i][0].transcript;
+      histDetailSearchInput.value = text;
+    };
+    recog.onerror = () => {};
+    recog.onend = () => { histSearchMicBtn.classList.remove('listening'); histDetailSearchInput.focus(); };
+    try{ recog.start(); }catch(e){ histDetailSearchInput.placeholder = "Micro momentanément indisponible — réessayez."; }
+  });
+
+  // ---- Conversation IA sur le contenu de cette entrée d'historique ----
+  async function runHistDetailSearch(){
+    const query = histDetailSearchInput.value.trim();
+    if (!query || !histDetailId) return;
+    histDetailSearchInput.value = '';
+    const qEl = document.createElement('div'); qEl.className = 'chat-msg q'; qEl.textContent = query;
+    histDetailChatThread.appendChild(qEl);
+    const aEl = document.createElement('div'); aEl.className = 'chat-msg a loading'; aEl.textContent = 'Recherche en cours…';
+    histDetailChatThread.appendChild(aEl);
+    histDetailChatThread.scrollTop = histDetailChatThread.scrollHeight;
+
+    const transcriptForSearch = histDetailTranscriptText + (histDetailSummary ? ('\n\nRésumé :\n' + histDetailSummary) : '');
+    try{
+      const response = await fetch(BACKEND_URL + '/v1/search', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ query, transcript: transcriptForSearch, history: histDetailChatHistory })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Erreur backend');
+      aEl.classList.remove('loading');
+      aEl.textContent = data.answer;
+      histDetailChatHistory.push({ question: query, answer: data.answer });
+      window.audyoUpdateHistory(histDetailId, {
+        transcript: { segments: histDetailOriginalSegments, chat: histDetailChatHistory },
+        summary: histDetailSummary,
+      });
+    }catch(err){
+      aEl.classList.remove('loading'); aEl.classList.add('err');
+      aEl.textContent = 'Recherche indisponible (' + (err.message || '') + ').';
+    }
+  }
+  histDetailSearchBtn.addEventListener('click', runHistDetailSearch);
+  histDetailSearchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') runHistDetailSearch(); });
 
   async function deleteEntry(id){
     try{
