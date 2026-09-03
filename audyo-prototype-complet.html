@@ -2563,15 +2563,24 @@ html, body{ margin:0; padding:0; }
   // de prénom, pour déclencher l'alerte vibrante selon le motif choisi ici.
   window.audyoTriggerVibrationAlert = function(){
     if (!navigator.vibrate) return;
-    if (pattern === 'triple'){ navigator.vibrate([120, 60, 120, 60, 120]); return; }
+    if (pattern === 'triple'){
+      navigator.vibrate(150);
+      setTimeout(() => navigator.vibrate(150), 250);
+      setTimeout(() => navigator.vibrate(150), 500);
+      return;
+    }
     if (pattern === 'continuous'){
       stopContinuous(); // évite d'empiler plusieurs boucles si une était déjà active
-      navigator.vibrate([400, 200]);
-      continuousInterval = setInterval(() => navigator.vibrate([400, 200]), 700);
+      navigator.vibrate(400);
+      continuousInterval = setInterval(() => navigator.vibrate(400), 700);
       banner.style.display = 'block';
       return;
     }
-    navigator.vibrate([120, 60, 120]); // double, par défaut
+    // Double, par défaut — impulsions simples chaînées plutôt qu'un motif à
+    // entrées multiples envoyé d'un coup : certains téléphones Android
+    // ignorent silencieusement tout sauf la première entrée d'un tel motif.
+    navigator.vibrate(150);
+    setTimeout(() => navigator.vibrate(150), 250);
   };
 })();
 
@@ -2602,6 +2611,23 @@ html, body{ margin:0; padding:0; }
     if (!word) return false;
     const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return new RegExp('(^|[^a-z0-9])' + escaped + '($|[^a-z0-9])').test(' ' + text + ' ');
+  }
+
+  // Pour les prénoms très courts (3-4 lettres, ex. "Mo", "Léa", "Ana"), le
+  // mot seul suffit rarement à être sûr : un bruit de fond ou une télévision
+  // peut produire un son proche au milieu d'une phrase sans rapport. On
+  // exige alors que la phrase reconnue soit courte et centrée sur le prénom
+  // (quelqu'un qui appelle, pas une longue phrase qui contient par hasard un
+  // son similaire) plutôt que n'importe où dans un texte plus long.
+  function isLikelyRealCall(text, name){
+    const normText = normalize(text);
+    const normName = normalize(name);
+    if (!containsWholeWord(normText, normName)) return false;
+    if (normName.length <= 4){
+      const wordCount = normText.split(/\s+/).filter(Boolean).length;
+      if (wordCount > 3) return false;
+    }
+    return true;
   }
 
   function loadSavedName(){
@@ -2637,7 +2663,7 @@ html, body{ margin:0; padding:0; }
     recognition.onresult = (event) => {
       for (let i = event.resultIndex; i < event.results.length; i++){
         const text = event.results[i][0].transcript || '';
-        if (containsWholeWord(normalize(text), normalize(savedName))){
+        if (isLikelyRealCall(text, savedName)){
           listenStatus.textContent = '🔔 Prénom détecté : "' + text.trim() + '"';
           listenStatus.classList.add('hit');
           if (window.audyoTriggerVibrationAlert) window.audyoTriggerVibrationAlert();
