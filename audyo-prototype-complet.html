@@ -41,12 +41,30 @@ html, body{ margin:0; padding:0; }
 
 /* ---- Accueil ---- */
 .home-header{ padding:30px 20px 6px; }
+.home-logo-lockup{ display:flex; align-items:center; gap:6px; }
+.home-logo-word{ font-size:26px; font-weight:800; color:var(--ink); letter-spacing:-0.01em; font-family:'Plus Jakarta Sans',sans-serif; }
+.home-o-badge{ position:relative; width:24px; height:24px; border-radius:50%; background:var(--grad); display:flex; align-items:center; justify-content:center; box-shadow:0 4px 10px -3px rgba(255,138,91,.45); }
+.home-o-badge::before, .home-o-badge::after{ content:''; position:absolute; top:0; left:0; right:0; bottom:0; border-radius:50%; border:1.5px solid #FBF3EC; opacity:.95; animation:launchRipple 2s ease-out infinite; }
+.home-o-badge::after{ animation-delay:1s; }
+.home-o-badge svg{ width:13px; height:13px; overflow:visible; }
+.home-o-badge .wave{ animation:launchWaveBeat 1.4s ease-in-out infinite; transform-box:fill-box; transform-origin:0% 50%; }
+.home-o-badge .wave.w2{ animation-delay:.2s; }
+
 .home-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:14px 16px; flex:1; align-content:start; }
-.home-card{ border:1px solid var(--line); background:var(--panel); text-align:left; border-radius:20px; padding:16px; cursor:pointer; aspect-ratio:1; display:flex; flex-direction:column; justify-content:flex-end; transition:transform .12s ease, opacity .12s ease; font-family:'Plus Jakarta Sans',sans-serif; }
+.home-card{ border:1px solid var(--line); background:var(--panel); text-align:left; border-radius:20px; padding:16px; cursor:pointer; display:flex; flex-direction:column; gap:10px; align-items:flex-start; transition:transform .12s ease, opacity .12s ease; font-family:'Plus Jakarta Sans',sans-serif; }
 .home-card:active{ transform:scale(.97); opacity:.9; }
-.home-card .ic{ font-size:26px; margin-bottom:8px; }
-.home-card .t{ font-size:14.5px; font-weight:700; }
-.home-card .d{ font-size:11px; color:var(--ink-soft); line-height:1.4; margin-top:2px; }
+.home-card .badge{ position:relative; width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; }
+.home-card .badge::before, .home-card .badge::after{ content:''; position:absolute; border-radius:50%; border:1.5px solid currentColor; }
+.home-card .badge::before{ inset:-6px; opacity:.3; }
+.home-card .badge::after{ inset:-12px; opacity:.15; }
+.home-card .t{ font-size:14.5px; font-weight:700; color:var(--ink); }
+.home-card .d{ font-size:11px; color:var(--ink-soft); line-height:1.4; margin-top:-4px; }
+
+.home-urgence-card{ margin:2px 16px 16px; border:1px solid rgba(255,107,107,.35); background:rgba(255,107,107,.07); border-radius:20px; padding:14px 16px; display:flex; align-items:center; gap:14px; cursor:pointer; text-align:left; font-family:'Plus Jakarta Sans',sans-serif; transition:transform .12s ease, opacity .12s ease; }
+.home-urgence-card:active{ transform:scale(.98); opacity:.9; }
+.home-urgence-card .badge{ flex:none; width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; color:var(--danger); background:rgba(255,107,107,.16); }
+.home-urgence-card .txt .t{ font-size:14px; font-weight:700; color:var(--ink); }
+.home-urgence-card .txt .d{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
 
 .tabbar{ display:flex; justify-content:space-around; padding:10px 4px 18px; border-top:1px solid var(--line); background:var(--bg); }
 .tab{ background:none; border:none; font-size:10.5px; color:var(--ink-soft); font-weight:600; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; font-family:'Plus Jakarta Sans',sans-serif; }
@@ -177,7 +195,7 @@ html, body{ margin:0; padding:0; }
 .big-captions .cc-text{ font-size:22px; font-weight:700; line-height:1.35; text-align:center; color:var(--ink); }
 
 /* ---- Urgence / SOS ---- */
-.urgence-quick-btn{ margin:0 16px 16px; border:1px solid var(--line); background:var(--panel); color:var(--ink); font-size:12px; font-weight:700; padding:12px; border-radius:14px; cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; }
+/* .urgence-quick-btn retirée — remplacée par .home-urgence-card */
 .urgence-card-big{ margin:16px; background:var(--grad); border-radius:22px; padding:26px 18px; text-align:center; }
 .ub-title{ font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:22px; color:#2B1710; }
 .urgence-options{ display:flex; flex-direction:column; gap:8px; padding:4px 16px 16px; }
@@ -330,24 +348,40 @@ html, body{ margin:0; padding:0; }
       <!-- ================= ACCUEIL ================= -->
       <div class="screen active" data-screen="home">
         <div class="home-header">
-          <div class="brand">Audy<span>O</span></div>
+          <div class="home-logo-lockup">
+            <span class="home-logo-word">Audy</span>
+            <div class="home-o-badge">
+              <svg viewBox="0 0 90 90">
+                <circle cx="30" cy="45" r="6" fill="#FBF3EC"/>
+                <path class="wave w1" d="M 42 33 A 17 17 0 0 1 42 57" stroke="#FBF3EC" stroke-width="5" fill="none" stroke-linecap="round"/>
+                <path class="wave w2" d="M 51 24 A 29 29 0 0 1 51 66" stroke="#FBF3EC" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.85"/>
+              </svg>
+            </div>
+          </div>
           <div class="mlabel">Mieux entendre. Mieux comprendre. Mieux communiquer.</div>
         </div>
         <div class="home-grid">
-          <button class="home-card" style="background:var(--spk-a-bg)" data-goto="conversation">
-            <div class="ic">💬</div><div class="t" style="color:var(--spk-a)">Conversation</div><div class="d">Transcription en direct</div>
+          <button class="home-card" data-goto="conversation">
+            <div class="badge" style="color:var(--spk-a); background:var(--spk-a-bg);">💬</div>
+            <div class="t">Conversation</div><div class="d">Transcription en direct</div>
           </button>
-          <button class="home-card" style="background:var(--spk-b-bg)" data-goto="ecoute">
-            <div class="ic">🔊</div><div class="t" style="color:var(--teal)">Écoute assistée</div><div class="d">Amplification & clarté</div>
+          <button class="home-card" data-goto="ecoute">
+            <div class="badge" style="color:var(--teal); background:var(--spk-b-bg);">🔊</div>
+            <div class="t">Écoute assistée</div><div class="d">Amplification & clarté</div>
           </button>
-          <button class="home-card" style="background:var(--amber-bg)" data-goto="traduction">
-            <div class="ic">🌐</div><div class="t" style="color:var(--amber)">Traduction</div><div class="d">Échange bilingue</div>
+          <button class="home-card" data-goto="traduction">
+            <div class="badge" style="color:var(--amber); background:var(--amber-bg);">🌐</div>
+            <div class="t">Traduction</div><div class="d">Échange bilingue</div>
           </button>
-          <button class="home-card" style="background:var(--purple-bg)" data-goto="reunion">
-            <div class="ic">📋</div><div class="t" style="color:var(--purple)">Réunion</div><div class="d">Multi-participants</div>
+          <button class="home-card" data-goto="reunion">
+            <div class="badge" style="color:var(--purple); background:var(--purple-bg);">📋</div>
+            <div class="t">Réunion</div><div class="d">Multi-participants</div>
           </button>
         </div>
-        <button class="urgence-quick-btn" data-goto="urgence">🆘 Carte de communication d'urgence</button>
+        <button class="home-urgence-card" data-goto="urgence">
+          <div class="badge">🆘</div>
+          <div class="txt"><div class="t">Urgence</div><div class="d">Carte à montrer, alerte et contact de confiance</div></div>
+        </button>
       </div>
 
       <!-- ================= CONVERSATION ================= -->
