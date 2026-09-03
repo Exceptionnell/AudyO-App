@@ -2595,6 +2595,15 @@ html, body{ margin:0; padding:0; }
     return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
   }
 
+  // Compare en mot entier, pas en simple fragment de texte : sans ça, un
+  // prénom court ou proche d'un autre mot (ex. "Ana" dans "banane") pouvait
+  // déclencher une fausse alerte sur un mot mal transcrit sans rapport.
+  function containsWholeWord(text, word){
+    if (!word) return false;
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('(^|[^a-z0-9])' + escaped + '($|[^a-z0-9])').test(' ' + text + ' ');
+  }
+
   function loadSavedName(){
     try{ savedName = localStorage.getItem(STORAGE_KEY) || ''; }catch(e){ savedName = ''; }
     if (savedName){
@@ -2628,7 +2637,7 @@ html, body{ margin:0; padding:0; }
     recognition.onresult = (event) => {
       for (let i = event.resultIndex; i < event.results.length; i++){
         const text = event.results[i][0].transcript || '';
-        if (normalize(text).includes(normalize(savedName))){
+        if (containsWholeWord(normalize(text), normalize(savedName))){
           listenStatus.textContent = '🔔 Prénom détecté : "' + text.trim() + '"';
           listenStatus.classList.add('hit');
           if (window.audyoTriggerVibrationAlert) window.audyoTriggerVibrationAlert();
