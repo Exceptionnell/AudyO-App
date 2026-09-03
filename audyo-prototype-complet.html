@@ -179,7 +179,7 @@ html, body{ margin:0; padding:0; }
 /* ---- Urgence / SOS ---- */
 .urgence-quick-btn{ margin:0 16px 16px; border:1px solid var(--line); background:var(--panel); color:var(--ink); font-size:12px; font-weight:700; padding:12px; border-radius:14px; cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; }
 .urgence-card-big{ margin:16px; background:var(--grad); border-radius:22px; padding:26px 18px; text-align:center; }
-.ub-title{ font-family:'Instrument Serif', serif; font-style:italic; font-size:22px; color:#2B1710; }
+.ub-title{ font-family:'Plus Jakarta Sans',sans-serif; font-weight:800; font-size:22px; color:#2B1710; }
 .urgence-options{ display:flex; flex-direction:column; gap:8px; padding:4px 16px 16px; }
 .urgence-opt-btn{ text-align:left; border:1.5px solid var(--line); background:var(--panel); color:var(--ink); font-size:12.5px; font-weight:600; padding:11px 14px; border-radius:14px; cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; }
 .urgence-opt-btn.active{ border-color:var(--coral); background:var(--amber-bg); }
@@ -613,9 +613,17 @@ html, body{ margin:0; padding:0; }
           <button id="sosBtn" class="sos-btn">🆘 Envoyer une alerte SOS</button>
           <div id="sosStatus" class="sos-status" style="display:none;"></div>
           <div class="sos-contact-row">
-            <span>👤 Julie — contact de confiance</span><button class="sos-edit">Modifier</button>
+            <span id="sosContactLabel">👤 Julie — contact de confiance</span><button class="sos-edit" id="sosEditBtn">Modifier</button>
           </div>
-          <div class="wip" style="padding-top:10px;">Interface réelle et interactive. L'envoi effectif d'un SMS et d'une localisation à un tiers nécessite un service tiers (API SMS + géolocalisation) non branché ici.</div>
+          <div class="sos-contact-form" id="sosContactForm" style="display:none;">
+            <input type="text" id="sosContactName" class="participant-input" placeholder="Nom du contact" style="margin:8px 16px 6px; width:calc(100% - 32px);">
+            <input type="tel" id="sosContactPhone" class="participant-input" placeholder="Numéro de téléphone" style="margin:0 16px 8px; width:calc(100% - 32px);">
+            <div style="display:flex; gap:8px; padding:0 16px 10px;">
+              <button id="sosContactSaveBtn" class="btn-primary" style="flex:1;">Enregistrer</button>
+              <button id="sosContactCancelBtn" class="btn-secondary" style="flex:1;">Annuler</button>
+            </div>
+          </div>
+          <div class="wip" style="padding-top:10px;">Ouvre votre application SMS avec le message et votre position pré-remplis — pour des raisons de sécurité, aucun navigateur ne peut envoyer un SMS tout seul : vous devez appuyer sur envoyer vous-même.</div>
         </div>
       </div>
 
@@ -2165,16 +2173,108 @@ html, body{ margin:0; padding:0; }
   const optBtns = document.querySelectorAll('.urgence-opt-btn');
   const sosBtn = document.getElementById('sosBtn');
   const sosStatus = document.getElementById('sosStatus');
+  const contactLabel = document.getElementById('sosContactLabel');
+  const editBtn = document.getElementById('sosEditBtn');
+  const contactForm = document.getElementById('sosContactForm');
+  const nameInput = document.getElementById('sosContactName');
+  const phoneInput = document.getElementById('sosContactPhone');
+  const saveBtn = document.getElementById('sosContactSaveBtn');
+  const cancelBtn = document.getElementById('sosContactCancelBtn');
+
+  const STORAGE_KEY = 'audyo-trusted-contact';
+  let contact = { name: 'Julie', phone: '' };
+
+  function loadContact(){
+    try{
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+      if (saved && saved.name) contact = saved;
+    }catch(e){}
+    refreshContactLabel();
+  }
+  function saveContact(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(contact)); }catch(e){}
+    refreshContactLabel();
+  }
+  function refreshContactLabel(){
+    contactLabel.textContent = '👤 ' + contact.name + ' — contact de confiance' + (contact.phone ? '' : ' (numéro non renseigné)');
+  }
+  loadContact();
 
   optBtns.forEach(btn => btn.addEventListener('click', () => {
     optBtns.forEach(b => b.classList.toggle('active', b === btn));
   }));
 
+  // "Modifier" : utilise le vrai sélecteur de contacts du téléphone quand le
+  // navigateur le permet (Chrome Android) ; sinon, formulaire de saisie
+  // manuelle — la Contact Picker API n'est pas disponible sur iOS Safari ni
+  // sur ordinateur, c'est une limite du navigateur, pas de l'app.
+  editBtn.addEventListener('click', async () => {
+    if (navigator.contacts && navigator.contacts.select){
+      try{
+        const selected = await navigator.contacts.select(['name', 'tel'], { multiple: false });
+        if (selected && selected.length > 0){
+          contact = { name: (selected[0].name && selected[0].name[0]) || 'Contact', phone: (selected[0].tel && selected[0].tel[0]) || '' };
+          saveContact();
+        }
+      }catch(e){
+        // Annulé par l'utilisateur ou refusé — pas d'erreur à afficher.
+      }
+      return;
+    }
+    // Repli : formulaire manuel.
+    nameInput.value = contact.name || '';
+    phoneInput.value = contact.phone || '';
+    contactForm.style.display = 'block';
+  });
+
+  saveBtn.addEventListener('click', () => {
+    const name = nameInput.value.trim();
+    const phone = phoneInput.value.trim();
+    if (!name) return;
+    contact = { name, phone };
+    saveContact();
+    contactForm.style.display = 'none';
+  });
+  cancelBtn.addEventListener('click', () => { contactForm.style.display = 'none'; });
+
+  function getSelectedMessage(){
+    const active = document.querySelector('.urgence-opt-btn.active');
+    return active ? active.dataset.msg : 'Merci de parler face à moi, lentement.';
+  }
+
   sosBtn.addEventListener('click', () => {
+    if (!contact.phone){
+      sosStatus.style.display = 'block';
+      sosStatus.textContent = "Aucun numéro enregistré pour votre contact de confiance — appuyez sur « Modifier » pour en choisir un.";
+      setTimeout(() => { sosStatus.style.display = 'none'; }, 4000);
+      return;
+    }
+    sosBtn.disabled = true;
     sosStatus.style.display = 'block';
-    sosStatus.textContent = 'Alerte préparée pour Julie — envoi réel non branché dans ce prototype.';
-    sosBtn.textContent = '✓ Alerte prête';
-    setTimeout(() => { sosBtn.textContent = '🆘 Envoyer une alerte SOS'; sosStatus.style.display = 'none'; }, 4000);
+    sosStatus.textContent = 'Localisation en cours…';
+
+    const buildAndOpen = (mapsLink) => {
+      const baseMsg = "Alerte AudyO — j'ai besoin d'aide. " + getSelectedMessage();
+      const fullMsg = baseMsg + (mapsLink ? ('\nMa position : ' + mapsLink) : '');
+      const smsUri = 'sms:' + encodeURIComponent(contact.phone) + '?body=' + encodeURIComponent(fullMsg);
+      sosStatus.textContent = 'Ouverture de votre app SMS pour ' + contact.name + '…';
+      window.location.href = smsUri;
+      sosBtn.disabled = false;
+      setTimeout(() => { sosStatus.style.display = 'none'; }, 5000);
+    };
+
+    if (navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const mapsLink = 'https://maps.google.com/?q=' + pos.coords.latitude + ',' + pos.coords.longitude;
+          buildAndOpen(mapsLink);
+        },
+        () => buildAndOpen(null), // position refusée ou indisponible : on envoie quand même le message, sans la position
+        { timeout: 6000 }
+      );
+    } else {
+      buildAndOpen(null);
+    }
   });
 })();
 
