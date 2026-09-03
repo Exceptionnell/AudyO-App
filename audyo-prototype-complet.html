@@ -35,6 +35,10 @@ html, body{ margin:0; padding:0; }
 
 .topbar{ padding:34px 18px 12px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
 .brand{ font-family:'Instrument Serif', serif; font-style:italic; font-weight:400; font-size:21px; }
+.topbar-logo-lockup{ display:flex; align-items:center; gap:5px; }
+.topbar-logo-word{ font-size:19px; font-weight:800; color:var(--ink); letter-spacing:-0.01em; font-family:'Plus Jakarta Sans',sans-serif; }
+.topbar-o-badge{ width:19px; height:19px; border-radius:50%; background:var(--grad); display:flex; align-items:center; justify-content:center; flex:none; }
+.topbar-o-badge svg{ width:11px; height:11px; }
 .brand span{ background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
 .mlabel{ font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); font-weight:600; margin-top:1px; }
 .back{ background:none; border:none; color:var(--teal); font-weight:700; font-size:13px; cursor:pointer; padding:4px 0; font-family:'Plus Jakarta Sans',sans-serif; }
@@ -192,6 +196,11 @@ html, body{ margin:0; padding:0; }
 /* ---- Sous-titrage TV/radio ---- */
 .caption-hint{ text-align:center; font-size:11px; color:var(--ink-soft); padding:12px 24px 4px; }
 .big-captions{ flex:1; display:flex; align-items:center; justify-content:center; padding:10px 20px; overflow:hidden; }
+.trans-caption{ width:100%; text-align:center; }
+.trans-caption .tag{ display:inline-block; font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--coral); background:var(--amber-bg); padding:3px 10px; border-radius:10px; margin-bottom:10px; }
+.trans-caption .src{ font-size:15px; color:var(--ink-soft); line-height:1.4; margin-bottom:14px; }
+.trans-caption .tgt{ font-weight:700; line-height:1.3; color:var(--ink); }
+.trans-caption.interim .tgt{ font-style:italic; color:var(--ink-soft); }
 .big-captions .cc-empty{ color:var(--ink-soft); font-size:13px; text-align:center; opacity:.7; }
 .big-captions .cc-text{ font-size:22px; font-weight:700; line-height:1.35; text-align:center; color:var(--ink); }
 
@@ -501,8 +510,8 @@ html, body{ margin:0; padding:0; }
           <div class="hint" id="tHint">Choisissez vos deux langues, puis appuyez sur le micro — plus besoin de rien toucher ensuite.</div>
         </div>
 
-        <div class="trans-list" id="transList">
-          <div class="empty-state" id="tEmptyState"><b>Aucune traduction en cours.</b><br>Parlez dans la langue source, la traduction apparaîtra à droite.</div>
+        <div class="big-captions" id="transBigCaptions">
+          <div class="cc-empty" id="tEmptyState">Parlez dans l'une des deux langues — la traduction s'affichera ici en grand. Tout reste enregistré dans l'Historique.</div>
         </div>
 
         <div class="bottombar">
@@ -613,7 +622,16 @@ html, body{ margin:0; padding:0; }
 
       <!-- ================= HISTORIQUE ================= -->
       <div class="screen" data-screen="historique">
-        <div class="topbar"><div class="brand">Audy<span>O</span></div><div class="mlabel">Historique</div></div>
+        <div class="topbar"><div class="topbar-logo-lockup">
+          <span class="topbar-logo-word">Audy</span>
+          <div class="topbar-o-badge">
+            <svg viewBox="0 0 90 90">
+              <circle cx="30" cy="45" r="6" fill="#FBF3EC"/>
+              <path d="M 42 33 A 17 17 0 0 1 42 57" stroke="#FBF3EC" stroke-width="5" fill="none" stroke-linecap="round"/>
+              <path d="M 51 24 A 29 29 0 0 1 51 66" stroke="#FBF3EC" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.85"/>
+            </svg>
+          </div>
+        </div><div class="mlabel">Historique</div></div>
 
         <div class="search-row">
           <input type="text" id="histSearchInput" class="search-input" placeholder="Rechercher dans cette session (ex. « qu'a dit Marie sur le budget »)">
@@ -676,7 +694,16 @@ html, body{ margin:0; padding:0; }
 
       <!-- ================= DASHBOARD ================= -->
       <div class="screen" data-screen="dashboard">
-        <div class="topbar"><div class="brand">Audy<span>O</span></div><div class="mlabel">Tableau de bord</div></div>
+        <div class="topbar"><div class="topbar-logo-lockup">
+          <span class="topbar-logo-word">Audy</span>
+          <div class="topbar-o-badge">
+            <svg viewBox="0 0 90 90">
+              <circle cx="30" cy="45" r="6" fill="#FBF3EC"/>
+              <path d="M 42 33 A 17 17 0 0 1 42 57" stroke="#FBF3EC" stroke-width="5" fill="none" stroke-linecap="round"/>
+              <path d="M 51 24 A 29 29 0 0 1 51 66" stroke="#FBF3EC" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.85"/>
+            </svg>
+          </div>
+        </div><div class="mlabel">Tableau de bord</div></div>
         <div class="stat-row">
           <div class="stat"><div class="n">4h12</div><div class="l">Écoute assistée</div></div>
           <div class="stat"><div class="n">12</div><div class="l">Conversations</div></div>
@@ -690,7 +717,16 @@ html, body{ margin:0; padding:0; }
 
       <!-- ================= REGLAGES ================= -->
       <div class="screen" data-screen="reglages">
-        <div class="topbar"><div class="brand">Audy<span>O</span></div><div class="mlabel">Réglages</div></div>
+        <div class="topbar"><div class="topbar-logo-lockup">
+          <span class="topbar-logo-word">Audy</span>
+          <div class="topbar-o-badge">
+            <svg viewBox="0 0 90 90">
+              <circle cx="30" cy="45" r="6" fill="#FBF3EC"/>
+              <path d="M 42 33 A 17 17 0 0 1 42 57" stroke="#FBF3EC" stroke-width="5" fill="none" stroke-linecap="round"/>
+              <path d="M 51 24 A 29 29 0 0 1 51 66" stroke="#FBF3EC" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.85"/>
+            </svg>
+          </div>
+        </div><div class="mlabel">Réglages</div></div>
         <div class="set-item"><span>👤 Profils auditifs</span><span class="chev">›</span></div>
         <button class="set-item as-btn" data-goto="profils"><span>🎚️ Profils de sensibilité</span><span class="chev">›</span></button>
         <button class="set-item as-btn" data-goto="alertes"><span>🔔 Alertes intelligentes</span><span class="chev">›</span></button>
@@ -1097,8 +1133,7 @@ html, body{ margin:0; padding:0; }
   const tHint = document.getElementById('tHint');
   const tRing1 = document.getElementById('tRing1');
   const tRing2 = document.getElementById('tRing2');
-  const transList = document.getElementById('transList');
-  const tEmptyState = document.getElementById('tEmptyState');
+  const transBigCaptions = document.getElementById('transBigCaptions');
   const tResetBtn = document.getElementById('tResetBtn');
   const speakerRow = document.getElementById('tSpeakerRow');
   const speakerBtnA = speakerRow.querySelector('[data-tlang="A"]');
@@ -1137,7 +1172,6 @@ html, body{ margin:0; padding:0; }
 
   let tListening = false, tSpeaking = false;
   let tSocket = null, tMicStream = null;
-  let tInterimRow = null;
   let tHistoryLog = [];
 
   function tStartPulse(){ tRing1.classList.add('on'); tRing2.classList.add('on'); }
@@ -1274,17 +1308,27 @@ html, body{ margin:0; padding:0; }
     tHint.textContent = "Choisissez vos deux langues, puis appuyez sur le micro.";
   }
 
-  function tEnsureInterimRow(text){
-    if (tEmptyState && tEmptyState.parentNode) tEmptyState.remove();
-    if (!tInterimRow){
-      tInterimRow = document.createElement('div');
-      tInterimRow.className = 'trow interim';
-      tInterimRow.innerHTML = '<div class="src"><span class="tag">Écoute…</span><br><span class="itxt"></span></div>';
-      transList.appendChild(tInterimRow);
+  // Ajuste la taille du texte traduit pour qu'il tienne toujours dans le
+  // cadre visible, sans jamais avoir besoin de faire défiler pour lire —
+  // même principe que le mode Sous-titres d'Écoute assistée.
+  const T_CAP_MAX_SIZE = 24, T_CAP_MIN_SIZE = 14;
+  function tFitCaptionText(){
+    const el = document.getElementById('transCapTgt');
+    if (!el) return;
+    let size = T_CAP_MAX_SIZE;
+    el.style.fontSize = size + 'px';
+    while (size > T_CAP_MIN_SIZE && (transBigCaptions.scrollHeight > transBigCaptions.clientHeight)){
+      size -= 1;
+      el.style.fontSize = size + 'px';
     }
-    const itxt = tInterimRow.querySelector('.itxt');
-    if (itxt) itxt.textContent = text;
-    transList.scrollTop = transList.scrollHeight;
+  }
+
+  function tEnsureInterimRow(text){
+    transBigCaptions.innerHTML =
+      '<div class="trans-caption interim">' +
+      '<span class="tag">Écoute…</span>' +
+      '<div class="src">' + escapeHtml(text) + '</div>' +
+      '</div>';
   }
 
   function tHandleSocketMessage(msg){
@@ -1300,10 +1344,6 @@ html, body{ margin:0; padding:0; }
   }
 
   async function tProcessFinalTurn(text, shortLangCode){
-    let row;
-    if (tInterimRow){ row = tInterimRow; row.className = 'trow'; tInterimRow = null; }
-    else { if (tEmptyState && tEmptyState.parentNode) tEmptyState.remove(); row = document.createElement('div'); row.className = 'trow'; }
-
     let detectedFull = shortToFull(shortLangCode) || sourceSel.value;
     // Filet de sécurité : si la langue détectée ne correspond à aucune des
     // deux langues choisies pour cette conversation (ne devrait plus arriver
@@ -1315,11 +1355,12 @@ html, body{ margin:0; padding:0; }
     }
     const targetFull = detectedFull === sourceSel.value ? targetSel.value : sourceSel.value;
 
-    row.innerHTML =
-      '<div class="src"><span class="tag">' + escapeHtml(langLabel(detectedFull)) + '</span><br>' + escapeHtml(text) + '</div>' +
-      '<div class="tgt loading"><span class="txt">Traduction…</span></div>';
-    transList.appendChild(row);
-    transList.scrollTop = transList.scrollHeight;
+    transBigCaptions.innerHTML =
+      '<div class="trans-caption">' +
+      '<span class="tag">' + escapeHtml(langLabel(detectedFull)) + '</span>' +
+      '<div class="src">' + escapeHtml(text) + '</div>' +
+      '<div class="tgt" id="transCapTgt">Traduction…</div>' +
+      '</div>';
     refreshSpeakerLabels(detectedFull);
 
     try{
@@ -1330,19 +1371,18 @@ html, body{ margin:0; padding:0; }
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Erreur backend');
 
-      const tgt = row.querySelector('.tgt');
-      tgt.classList.remove('loading');
-      tgt.innerHTML = '<span class="txt">' + escapeHtml(data.translation) + '</span><button class="speak-btn" title="Écouter">🔊</button>';
-      tgt.querySelector('.speak-btn').addEventListener('click', () => tSpeak(data.translation, targetFull));
+      const tgtEl = document.getElementById('transCapTgt');
+      if (tgtEl) tgtEl.textContent = data.translation;
+      tFitCaptionText();
+      // La sauvegarde dans l'Historique reste inchangée : chaque échange
+      // s'accumule ici, quelle que soit la présentation à l'écran.
       tHistoryLog.push({ source: text, target: data.translation, sourceLang: langLabel(detectedFull), targetLang: langLabel(targetFull) });
 
       tSpeak(data.translation, targetFull);
     }catch(e){
-      const tgt = row.querySelector('.tgt');
-      tgt.classList.remove('loading');
-      tgt.innerHTML = '<span class="txt" style="color:var(--danger)">Échec — vérifiez que le backend tourne sur ' + escapeHtml(BACKEND_URL) + '.</span>';
+      const tgtEl = document.getElementById('transCapTgt');
+      if (tgtEl){ tgtEl.style.color = 'var(--danger)'; tgtEl.textContent = 'Échec — vérifiez que le backend tourne sur ' + BACKEND_URL + '.'; }
     }
-    transList.scrollTop = transList.scrollHeight;
   }
 
   function tSpeak(text, langCode){
@@ -1371,10 +1411,7 @@ html, body{ margin:0; padding:0; }
   tMicBtn.addEventListener('click', () => tListening ? tStopListening() : tStartListening());
   tResetBtn.addEventListener('click', () => {
     saveTranslationSession();
-    transList.innerHTML = '';
-    const es = document.createElement('div'); es.className = 'empty-state'; es.id = 'tEmptyState';
-    es.innerHTML = "<b>Aucune traduction en cours.</b><br>Parlez dans l'une des deux langues, l'app détecte toute seule.";
-    transList.appendChild(es);
+    transBigCaptions.innerHTML = "<div class=\"cc-empty\" id=\"tEmptyState\">Parlez dans l'une des deux langues — la traduction s'affichera ici en grand. Tout reste enregistré dans l'Historique.</div>";
   });
 
   document.querySelectorAll('[data-goto], .tab').forEach(el => {
