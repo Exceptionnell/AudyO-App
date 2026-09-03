@@ -177,6 +177,10 @@ html, body{ margin:0; padding:0; }
 .add-participant-row{ display:flex; gap:8px; padding:10px 16px; }
 .rename-row{ display:flex; gap:8px; padding:8px 16px; border-bottom:1px solid var(--line); }
 .name-alert-row{ display:flex; gap:8px; padding:4px 16px 0; }
+.vib-pattern-row{ display:flex; gap:8px; padding:0 16px 4px; }
+.vib-pattern-btn{ flex:1; border:1.5px solid var(--line); background:var(--panel); color:var(--ink-soft); font-size:11.5px; font-weight:700; padding:9px 4px; border-radius:12px; cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; }
+.vib-pattern-btn.active{ background:var(--amber-bg); color:var(--coral); border-color:transparent; }
+.vib-alert-banner{ position:absolute; top:0; left:0; right:0; z-index:80; background:var(--danger); color:#2B1710; font-size:12.5px; font-weight:800; text-align:center; padding:10px 16px; cursor:pointer; }
 .participant-input{ flex:1; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:12px; padding:9px 12px; font-family:'Plus Jakarta Sans',sans-serif; font-size:12.5px; }
 .participant-input::placeholder{ color:var(--ink-soft); }
 .add-btn{ border:none; background:var(--grad); color:var(--grad-ink); font-weight:700; font-size:12px; padding:0 16px; border-radius:12px; cursor:pointer; }
@@ -338,6 +342,8 @@ html, body{ margin:0; padding:0; }
 <div class="audyo-root">
   <div class="phone">
     <div class="notch"></div>
+
+    <div id="vibAlertBanner" class="vib-alert-banner" style="display:none;">🔔 Alerte en cours — Toucher pour arrêter</div>
 
     <!-- ================= ÉCRAN DE LANCEMENT ================= -->
     <div class="launch-screen" id="launchScreen">
@@ -817,6 +823,16 @@ html, body{ margin:0; padding:0; }
           <button id="nameListenToggleBtn" class="btn-primary" style="margin:8px 16px 4px; flex:none;" disabled>🎙 Écouter mon prénom</button>
           <div class="detect-status" id="nameListenStatus">Enregistrez votre prénom pour activer l'écoute.</div>
           <div class="detect-note">Détecte votre prénom prononcé à voix haute par reconnaissance vocale — fonctionne séparément de la détection de sons ci-dessus (un seul micro actif à la fois, l'un coupe l'autre).</div>
+        </div>
+
+        <div class="vibration-pattern-panel">
+          <div class="section-label" style="padding:10px 16px 6px;">Motif de vibration des alertes</div>
+          <div class="vib-pattern-row">
+            <button class="vib-pattern-btn" data-vib="double">●● Double</button>
+            <button class="vib-pattern-btn" data-vib="triple">●●● Triple</button>
+            <button class="vib-pattern-btn" data-vib="continuous">∿ Continue</button>
+          </div>
+          <div class="detect-note" id="vibContinuousNote" style="display:none;">En continu, l'alerte vibre sans s'arrêter jusqu'à ce que vous touchiez la bannière affichée à l'écran.</div>
         </div>
 
         <div class="alert-list" id="alertList">
@@ -2509,6 +2525,56 @@ html, body{ margin:0; padding:0; }
   });
 })();
 
+// ==================== ALERTES — MOTIF DE VIBRATION ====================
+(function(){
+  const STORAGE_KEY = 'audyo-vibration-pattern';
+  const btns = document.querySelectorAll('.vib-pattern-btn');
+  const continuousNote = document.getElementById('vibContinuousNote');
+  const banner = document.getElementById('vibAlertBanner');
+  if (!btns.length || !banner) return;
+
+  let pattern = 'double';
+  let continuousInterval = null;
+
+  function refreshButtons(){
+    btns.forEach(b => b.classList.toggle('active', b.dataset.vib === pattern));
+    continuousNote.style.display = pattern === 'continuous' ? 'block' : 'none';
+  }
+  try{ pattern = localStorage.getItem(STORAGE_KEY) || 'double'; }catch(e){}
+  refreshButtons();
+
+  btns.forEach(b => b.addEventListener('click', () => {
+    pattern = b.dataset.vib;
+    try{ localStorage.setItem(STORAGE_KEY, pattern); }catch(e){}
+    refreshButtons();
+  }));
+
+  function stopContinuous(){
+    if (continuousInterval){ clearInterval(continuousInterval); continuousInterval = null; }
+    if (navigator.vibrate) navigator.vibrate(0);
+    banner.style.display = 'none';
+  }
+  banner.addEventListener('click', stopContinuous);
+  document.querySelectorAll('[data-goto], .tab').forEach(el => {
+    el.addEventListener('click', stopContinuous);
+  });
+
+  // Fonction partagée, appelée par la détection de sons et la reconnaissance
+  // de prénom, pour déclencher l'alerte vibrante selon le motif choisi ici.
+  window.audyoTriggerVibrationAlert = function(){
+    if (!navigator.vibrate) return;
+    if (pattern === 'triple'){ navigator.vibrate([120, 60, 120, 60, 120]); return; }
+    if (pattern === 'continuous'){
+      stopContinuous(); // évite d'empiler plusieurs boucles si une était déjà active
+      navigator.vibrate([400, 200]);
+      continuousInterval = setInterval(() => navigator.vibrate([400, 200]), 700);
+      banner.style.display = 'block';
+      return;
+    }
+    navigator.vibrate([120, 60, 120]); // double, par défaut
+  };
+})();
+
 // ==================== ALERTES — RECONNAISSANCE DE MON PRÉNOM ====================
 (function(){
   const nameInput = document.getElementById('nameAlertInput');
@@ -2565,7 +2631,7 @@ html, body{ margin:0; padding:0; }
         if (normalize(text).includes(normalize(savedName))){
           listenStatus.textContent = '🔔 Prénom détecté : "' + text.trim() + '"';
           listenStatus.classList.add('hit');
-          if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+          if (window.audyoTriggerVibrationAlert) window.audyoTriggerVibrationAlert();
           setTimeout(() => listenStatus.classList.remove('hit'), 2500);
         }
       }
@@ -2666,7 +2732,7 @@ html, body{ margin:0; padding:0; }
     toast.className = 'alert-toast';
     toast.textContent = text;
     alertesScreen.appendChild(toast);
-    if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+    if (window.audyoTriggerVibrationAlert) window.audyoTriggerVibrationAlert();
     setTimeout(() => { if (toast.parentNode) toast.remove(); }, 3500);
   }
 
