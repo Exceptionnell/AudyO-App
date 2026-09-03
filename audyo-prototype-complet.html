@@ -1094,11 +1094,15 @@ html, body{ margin:0; padding:0; }
       // en mode compressé (Ogg), ce qui provoquait une fermeture immédiate
       // et silencieuse de la connexion.
       //
-      // Détection ouverte, sans restriction à deux langues précises : le
-      // modèle peut détecter n'importe laquelle de ses langues nativement
-      // supportées, pas seulement les deux choisies dans les menus.
+      // Compromis entre les deux extrêmes déjà essayés : ni restreint aux
+      // deux langues choisies (rejeté, trop contraignant), ni totalement
+      // ouvert (dérive observée vers l'anglais). On oriente la détection vers
+      // l'ensemble des langues proposées par l'app (8), ce qui réduit
+      // nettement les erreurs sans enfermer la conversation sur une seule paire.
+      const allAppShortCodes = LANGUAGES.map(l => l.short);
+      const languageCodesParam = encodeURIComponent(JSON.stringify(allAppShortCodes));
       const wsUrl = 'wss://streaming.assemblyai.com/v3/ws?token=' + encodeURIComponent(token) +
-        '&speech_model=universal-3-5-pro&language_detection=true' +
+        '&speech_model=universal-3-5-pro&language_detection=true&language_codes=' + languageCodesParam +
         '&encoding=pcm_s16le&sample_rate=16000';
       tSocket = new WebSocket(wsUrl);
       tSocket.binaryType = 'arraybuffer';
