@@ -171,6 +171,7 @@ html, body{ margin:0; padding:0; }
 .p-sample-btn.done{ background:var(--spk-b-bg); color:var(--spk-b); border-color:transparent; }
 .p-remove{ border:none; background:none; color:var(--ink-soft); opacity:.6; font-size:15px; cursor:pointer; padding:0 2px; flex-shrink:0; }
 .add-participant-row{ display:flex; gap:8px; padding:10px 16px; }
+.rename-row{ display:flex; gap:8px; padding:8px 16px; border-bottom:1px solid var(--line); }
 .name-alert-row{ display:flex; gap:8px; padding:4px 16px 0; }
 .participant-input{ flex:1; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:12px; padding:9px 12px; font-family:'Plus Jakarta Sans',sans-serif; font-size:12.5px; }
 .participant-input::placeholder{ color:var(--ink-soft); }
@@ -415,6 +416,10 @@ html, body{ margin:0; padding:0; }
         </div>
         <div class="summary-panel" id="summaryPanel">
           <div class="summary-header"><h3 id="summaryTitle">Résumé de la conversation</h3><button id="closeSummary">✕</button></div>
+          <div class="rename-row">
+            <input type="text" id="convTitleInput" class="participant-input" placeholder="Nommer cette conversation…" style="flex:1;">
+            <button id="convTitleSaveBtn" class="add-btn">Renommer</button>
+          </div>
           <div class="summary-body" id="summaryBody"></div>
         </div>
       </div>
@@ -584,6 +589,10 @@ html, body{ margin:0; padding:0; }
 
           <div class="summary-panel" id="rSummaryPanel">
             <div class="summary-header"><h3>Compte-rendu de réunion</h3><button id="rCloseSummary">✕</button></div>
+            <div class="rename-row">
+              <input type="text" id="rTitleInput" class="participant-input" placeholder="Nommer cette réunion…" style="flex:1;">
+              <button id="rTitleSaveBtn" class="add-btn">Renommer</button>
+            </div>
             <div class="summary-body" id="rSummaryBody"></div>
 
             <div class="voice-read-row">
@@ -618,6 +627,10 @@ html, body{ margin:0; padding:0; }
 
         <div id="histDetailPanel" class="summary-panel">
           <div class="summary-header"><h3 id="histDetailTitle">Détail</h3><button id="histDetailClose">✕</button></div>
+          <div class="rename-row">
+            <input type="text" id="histRenameInput" class="participant-input" placeholder="Renommer…" style="flex:1;">
+            <button id="histRenameSaveBtn" class="add-btn">Renommer</button>
+          </div>
           <div class="summary-body" id="histDetailBody"></div>
 
           <div class="search-row" style="padding-top:10px; border-top:1px solid var(--line); margin-top:6px;">
@@ -1016,12 +1029,17 @@ html, body{ margin:0; padding:0; }
     es.innerHTML = '<b>Aucune conversation en cours.</b><br>Appuyez sur le micro et parlez normalement.';
     transcriptEl.appendChild(es); summaryBtn.disabled = true;
   });
+  const convTitleInput = document.getElementById('convTitleInput');
+  const convTitleSaveBtn = document.getElementById('convTitleSaveBtn');
+  let convCurrentHistoryId = null;
+
   closeSummary.addEventListener('click', () => summaryPanel.classList.remove('open'));
   summaryBtn.addEventListener('click', async () => {
     if (segments.length === 0) return;
     summaryTitle.textContent = convMode === 'medical' ? 'Résumé du rendez-vous médical' : 'Résumé de la conversation';
     summaryPanel.classList.add('open');
     summaryBody.innerHTML = '<p class="loading">Génération du résumé…</p>';
+    convCurrentHistoryId = null;
     try{
       const response = await fetch(BACKEND_URL + '/v1/conversations/summary', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -1030,15 +1048,25 @@ html, body{ margin:0; padding:0; }
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Erreur backend');
       summaryBody.innerHTML = markdownToDisplayHtml(data.summary);
-      window.audyoSaveToHistory({
+      const autoTitle = (convMode === 'medical' ? 'RDV médical' : 'Conversation') + ' · ' + new Date().toLocaleDateString('fr-FR', { day:'2-digit', month:'short' });
+      convTitleInput.value = autoTitle;
+      convCurrentHistoryId = await window.audyoSaveToHistory({
         kind: convMode === 'medical' ? 'rdv-medical' : 'conversation',
-        title: (convMode === 'medical' ? 'RDV médical' : 'Conversation') + ' · ' + new Date().toLocaleDateString('fr-FR', { day:'2-digit', month:'short' }),
+        title: autoTitle,
         transcript: segments,
         summary: data.summary,
       });
     }catch(err){
       summaryBody.innerHTML = '<p class="err">Le résumé n\'a pas pu être généré (' + escapeHtml(err.message || '') + '). Vérifiez que le backend tourne bien sur ' + BACKEND_URL + '.</p>';
     }
+  });
+
+  convTitleSaveBtn.addEventListener('click', () => {
+    const newTitle = convTitleInput.value.trim();
+    if (!newTitle || !convCurrentHistoryId) return;
+    window.audyoUpdateHistory(convCurrentHistoryId, { title: newTitle });
+    convTitleSaveBtn.textContent = '✓ Renommé';
+    setTimeout(() => { convTitleSaveBtn.textContent = 'Renommer'; }, 1500);
   });
 
   // Coupe le micro de Conversation si on quitte l'écran, pour éviter tout conflit
@@ -1809,6 +1837,8 @@ html, body{ margin:0; padding:0; }
   let rLastSummaryText = '';
   let rCurrentHistoryId = null;
   let rChatHistory = [];
+  const rTitleInput = document.getElementById('rTitleInput');
+  const rTitleSaveBtn = document.getElementById('rTitleSaveBtn');
 
   rCloseSummary.addEventListener('click', () => rSummaryPanel.classList.remove('open'));
   rSummaryBtn.addEventListener('click', async () => {
@@ -1828,15 +1858,25 @@ html, body{ margin:0; padding:0; }
       if (!response.ok) throw new Error(data.error || 'Erreur backend');
       rLastSummaryText = data.summary;
       rSummaryBody.innerHTML = markdownToDisplayHtml(data.summary);
+      const autoTitle = 'Réunion · ' + participants.map(p => p.name).join(', ').slice(0, 60);
+      rTitleInput.value = autoTitle;
       rCurrentHistoryId = await window.audyoSaveToHistory({
         kind: 'reunion',
-        title: 'Réunion · ' + participants.map(p => p.name).join(', ').slice(0, 60),
+        title: autoTitle,
         transcript: { segments: rSegments, chat: rChatHistory },
         summary: data.summary,
       });
     }catch(err){
       rSummaryBody.innerHTML = '<p class="err">Le résumé n\'a pas pu être généré (' + escapeHtml(err.message || '') + '). Vérifiez que le backend tourne bien sur ' + BACKEND_URL + '.</p>';
     }
+  });
+
+  rTitleSaveBtn.addEventListener('click', () => {
+    const newTitle = rTitleInput.value.trim();
+    if (!newTitle || !rCurrentHistoryId) return;
+    window.audyoUpdateHistory(rCurrentHistoryId, { title: newTitle });
+    rTitleSaveBtn.textContent = '✓ Renommé';
+    setTimeout(() => { rTitleSaveBtn.textContent = 'Renommer'; }, 1500);
   });
 
   // ---- Lecture vocale du compte-rendu, avec choix Homme / Femme ----
@@ -2648,6 +2688,8 @@ html, body{ margin:0; padding:0; }
 
   const histDetailChatThread = document.getElementById('histDetailChatThread');
   const histDetailSearchInput = document.getElementById('histDetailSearchInput');
+  const histRenameInput = document.getElementById('histRenameInput');
+  const histRenameSaveBtn = document.getElementById('histRenameSaveBtn');
   const histDetailSearchBtn = document.getElementById('histDetailSearchBtn');
   const histSearchMicBtn = document.getElementById('histSearchMicBtn');
 
@@ -2674,13 +2716,14 @@ html, body{ margin:0; padding:0; }
   }
 
   async function openDetail(entry){
-    detailTitle.textContent = KIND_LABELS[entry.kind] || entry.title;
+    detailTitle.textContent = entry.title || KIND_LABELS[entry.kind] || 'Détail';
     detailBody.innerHTML = '<p class="loading">Chargement…</p>';
     detailPanel.classList.add('open');
     histDetailId = entry.id;
     histDetailChatHistory = [];
     histDetailChatThread.innerHTML = '';
     histDetailSearchInput.value = '';
+    histRenameInput.value = entry.title || '';
     try{
       const response = await fetch(BACKEND_URL + '/v1/history/' + entry.id + '?deviceId=' + encodeURIComponent(window.audyoDeviceId));
       const data = await response.json();
@@ -2698,6 +2741,16 @@ html, body{ margin:0; padding:0; }
       detailBody.innerHTML = '<p class="err">Impossible de charger le détail (' + escapeHtml(err.message || '') + ').</p>';
     }
   }
+
+  histRenameSaveBtn.addEventListener('click', async () => {
+    const newTitle = histRenameInput.value.trim();
+    if (!newTitle || !histDetailId) return;
+    await window.audyoUpdateHistory(histDetailId, { title: newTitle });
+    detailTitle.textContent = newTitle;
+    histRenameSaveBtn.textContent = '✓ Renommé';
+    setTimeout(() => { histRenameSaveBtn.textContent = 'Renommer'; }, 1500);
+    loadHistory(); // rafraîchit la liste pour refléter le nouveau nom
+  });
   detailClose.addEventListener('click', () => detailPanel.classList.remove('open'));
 
   // ---- Micro pour dicter la question (remplit le champ, n'envoie jamais seul) ----
