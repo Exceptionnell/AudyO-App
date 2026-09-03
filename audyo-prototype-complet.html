@@ -184,6 +184,10 @@ html, body{ margin:0; padding:0; }
 .voice-note b{ color:var(--ink); opacity:1; }
 
 .participant-chip-row{ display:flex; gap:8px; padding:0 16px 8px; flex-wrap:wrap; }
+.speaker-assign-prompt{ margin:0 16px 10px; background:var(--amber-bg); border:1px solid rgba(255,181,98,0.35); border-radius:14px; padding:12px 14px; }
+.sap-text{ font-size:12.5px; font-weight:700; color:var(--ink); margin-bottom:8px; }
+.sap-options{ display:flex; gap:8px; flex-wrap:wrap; }
+.sap-options button{ border:1.5px solid var(--line); background:var(--panel); border-radius:14px; padding:6px 12px; font-size:12px; font-weight:700; cursor:pointer; font-family:'Plus Jakarta Sans',sans-serif; }
 .p-chip{ border:1.5px solid var(--line); background:var(--panel); border-radius:20px; padding:5px 12px 5px 6px; display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; }
 .p-chip .dot{ width:16px; height:16px; border-radius:50%; }
 .p-chip.active{ border-color:transparent; color:var(--ink); }
@@ -534,7 +538,7 @@ html, body{ margin:0; padding:0; }
           </div>
 
           <div class="voice-note">
-            🎙 « Échantillon vocal » enregistre 3 secondes de voix par participant, pour préparer une future reconnaissance automatique. <b>Aujourd'hui, l'identification pendant la réunion reste manuelle</b> (vous tapez sur le nom qui parle) — reconnaître un timbre de voix en temps réel demande un moteur d'IA vocale dédié côté serveur, qui n'est pas encore branché.
+            🎙 L'app distingue automatiquement les voix pendant la réunion (Locuteur A, B…) — vous attribuez chaque prénom une seule fois, à sa première prise de parole, pas à chaque phrase. « Échantillon vocal » reste facultatif pour l'instant, en vue d'une future reconnaissance directe par timbre de voix. Les toutes premières phrases peuvent être moins précises, le temps que l'app distingue bien les voix entre elles.
           </div>
 
           <button id="startReunionBtn" class="btn-primary" style="margin:6px 16px 16px; flex:none;" disabled>Démarrer la réunion</button>
@@ -554,13 +558,16 @@ html, body{ margin:0; padding:0; }
                 <div class="ring" id="rRing1"></div><div class="ring" id="rRing2"></div>
                 <button id="rMicBtn" class="mic-btn mic-btn-sm">🎙</button>
               </div>
-              <div class="hint" id="rHint">Touchez le nom de la personne qui parle, puis le micro.</div>
+              <div class="hint" id="rHint">Appuyez sur le micro — l'app distingue les voix toute seule.</div>
             </div>
 
-            <div class="participant-chip-row" id="participantChipRow"></div>
+            <div id="rSpeakerAssignPrompt" class="speaker-assign-prompt" style="display:none;">
+              <div class="sap-text">Qui est <span id="rSapLabel">Locuteur A</span> ?</div>
+              <div class="sap-options" id="rSapOptions"></div>
+            </div>
 
             <div class="transcript" id="rTranscript">
-              <div class="empty-state" id="rEmptyState"><b>Aucune prise de parole enregistrée.</b><br>Sélectionnez qui parle, puis démarrez le micro.</div>
+              <div class="empty-state" id="rEmptyState"><b>Aucune prise de parole enregistrée.</b><br>Démarrez le micro — l'app distingue les voix automatiquement, vous attribuez chaque prénom une seule fois.</div>
             </div>
           </div>
 
@@ -1549,7 +1556,6 @@ html, body{ margin:0; padding:0; }
   const startBtn = document.getElementById('startReunionBtn');
   const setupView = document.getElementById('reunionSetup');
   const liveView = document.getElementById('reunionLive');
-  const chipRow = document.getElementById('participantChipRow');
   const rMicBtn = document.getElementById('rMicBtn');
   const rHint = document.getElementById('rHint');
   const rRing1 = document.getElementById('rRing1');
@@ -1565,7 +1571,6 @@ html, body{ margin:0; padding:0; }
 
   let participants = []; // { id, name, color, hasSample }
   let nextId = 1;
-  let activeParticipantId = null;
   let rSegments = [];
 
   function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -1670,26 +1675,10 @@ html, body{ margin:0; padding:0; }
   });
   newNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addBtn.click(); });
 
-  function renderChips(){
-    chipRow.innerHTML = '';
-    participants.forEach(p => {
-      const chip = document.createElement('button');
-      chip.className = 'p-chip' + (p.id === activeParticipantId ? ' active' : '');
-      chip.style.background = p.id === activeParticipantId ? p.color : 'var(--panel)';
-      chip.innerHTML = '<span class="dot" style="background:' + (p.id === activeParticipantId ? 'rgba(43,23,16,0.25)' : p.color) + '"></span>' + escapeHtml(p.name);
-      chip.addEventListener('click', () => { activeParticipantId = p.id; renderChips(); });
-      chipRow.appendChild(chip);
-    });
-  }
-
-  function participantById(id){ return participants.find(p => p.id === id); }
-
   startBtn.addEventListener('click', () => {
     if (participants.length === 0) return;
-    activeParticipantId = participants[0].id;
     setupView.style.display = 'none';
     liveView.style.display = 'flex';
-    renderChips();
   });
   endBtn.addEventListener('click', () => {
     if (rListening) rStopListening();
@@ -1698,8 +1687,11 @@ html, body{ margin:0; padding:0; }
   });
 
   // ---- Micro et transcription (même mécanique que Conversation, avec N participants nommés) ----
-  let rListening = false, rRecognition = null, rInterimBubble = null;
-  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rListening = false, rInterimBubble = null;
+  let rSocket = null, rMicStream = null, rSpeaking = false;
+  let rAudioCtx = null, rAudioSourceNode = null, rAudioProcessor = null;
+  let rSpeakerMap = {};       // { "A": {id, name, color}, ... } — rempli au fil des attributions
+  let rPendingLabel = null;   // locuteur en attente d'attribution ("A", "B"...)
 
   function rAddBubble(participant, text, isInterim){
     if (rEmptyState && rEmptyState.parentNode) rEmptyState.remove();
@@ -1716,50 +1708,178 @@ html, body{ margin:0; padding:0; }
   function rStartPulse(){ rRing1.classList.add('on'); rRing2.classList.add('on'); }
   function rStopPulse(){ rRing1.classList.remove('on'); rRing2.classList.remove('on'); }
 
+  async function rGetToken(){
+    const r = await fetch(BACKEND_URL + '/v1/streaming-token');
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Jeton indisponible');
+    return d.token;
+  }
+
   async function rStartListening(){
-    if (!SpeechRecognitionImpl){ rHint.textContent = "Reconnaissance vocale indisponible ici — utilisez Chrome ou Edge."; return; }
-    rStartPulse();
-    rRecognition = new SpeechRecognitionImpl();
-    rRecognition.lang = 'fr-FR'; rRecognition.continuous = false; rRecognition.interimResults = true;
-    rRecognition.onresult = (event) => {
-      const participant = participantById(activeParticipantId);
-      if (!participant) return;
-      let interimText = '';
-      for (let i = event.resultIndex; i < event.results.length; i++){
-        const res = event.results[i];
-        if (res.isFinal){
-          const text = res[0].transcript.trim();
-          if (text){
-            rSegments.push({ participant: participant.name, text });
-            window.audyoSession.reunion = rSegments;
-            if (rInterimBubble){ rInterimBubble.remove(); rInterimBubble = null; }
-            rTranscript.appendChild(rAddBubble(participant, text, false));
-            rSummaryBtn.disabled = rSegments.length === 0;
-            rTranscript.scrollTop = rTranscript.scrollHeight;
-          }
-        } else { interimText += res[0].transcript; }
-      }
-      if (interimText){
-        if (!rInterimBubble){ rInterimBubble = rAddBubble(participant, interimText, true); rTranscript.appendChild(rInterimBubble); }
-        else { rInterimBubble.innerHTML = '<span class="meta">' + escapeHtml(participant.name) + ' · en cours…</span>' + escapeHtml(interimText); }
+    rMicBtn.classList.add('listening');
+    rHint.textContent = 'Connexion…';
+    try{
+      const token = await rGetToken();
+      rMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // Diarisation en direct : sépare automatiquement les voix (Locuteur A, B…)
+      // sans savoir qui elles sont — l'attribution du prénom se fait une fois
+      // par personne via la carte qui apparaît à l'écran (voir rShowAssignPrompt).
+      const maxSpeakers = Math.min(Math.max(participants.length, 2), 10);
+      const wsUrl = 'wss://streaming.assemblyai.com/v3/ws?token=' + encodeURIComponent(token) +
+        '&speech_model=universal-3-5-pro&speaker_labels=true&max_speakers=' + maxSpeakers +
+        '&encoding=pcm_s16le&sample_rate=16000';
+      rSocket = new WebSocket(wsUrl);
+      rSocket.binaryType = 'arraybuffer';
+
+      rSocket.onopen = () => {
+        rListening = true;
+        rStartPulse();
+        rHint.textContent = "Écoute en cours — l'app distingue les voix toute seule.";
+        rStartRawAudioCapture();
+      };
+      rSocket.onmessage = (event) => {
+        try{ rHandleSocketMessage(JSON.parse(event.data)); }catch(e){}
+      };
+      rSocket.onerror = () => { rHint.textContent = "Connexion au service de reconnaissance interrompue."; };
+      rSocket.onclose = () => { if (rListening) rStopListening(); };
+    }catch(e){
+      rHint.textContent = "Impossible de démarrer l'écoute (" + escapeHtml(e.message || '') + ").";
+      rMicBtn.classList.remove('listening');
+      rStopPulse();
+    }
+  }
+
+  function rStartRawAudioCapture(){
+    if (!rMicStream) return;
+    try{
+      rAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      rAudioSourceNode = rAudioCtx.createMediaStreamSource(rMicStream);
+      rAudioProcessor = rAudioCtx.createScriptProcessor(4096, 1, 1);
+      const nativeRate = rAudioCtx.sampleRate;
+
+      rAudioProcessor.onaudioprocess = (e) => {
+        if (rSpeaking) return; // ne capte pas la voix de synthèse pendant la lecture du compte-rendu
+        if (!rSocket || rSocket.readyState !== WebSocket.OPEN) return;
+        const input = e.inputBuffer.getChannelData(0);
+        const resampled = rResampleTo16k(input, nativeRate);
+        const pcm16 = rFloatTo16BitPCM(resampled);
+        rSocket.send(pcm16);
+      };
+      rAudioSourceNode.connect(rAudioProcessor);
+      const muteGain = rAudioCtx.createGain();
+      muteGain.gain.value = 0;
+      rAudioProcessor.connect(muteGain);
+      muteGain.connect(rAudioCtx.destination);
+    }catch(e){
+      rHint.textContent = "Capture audio indisponible sur ce navigateur.";
+    }
+  }
+
+  function rResampleTo16k(buffer, inputRate){
+    if (inputRate === 16000) return buffer;
+    const ratio = inputRate / 16000;
+    const outLength = Math.floor(buffer.length / ratio);
+    const out = new Float32Array(outLength);
+    for (let i = 0; i < outLength; i++){
+      const srcIndex = i * ratio;
+      const i0 = Math.floor(srcIndex);
+      const i1 = Math.min(i0 + 1, buffer.length - 1);
+      const frac = srcIndex - i0;
+      out[i] = buffer[i0] * (1 - frac) + buffer[i1] * frac;
+    }
+    return out;
+  }
+  function rFloatTo16BitPCM(float32Array){
+    const buffer = new ArrayBuffer(float32Array.length * 2);
+    const view = new DataView(buffer);
+    let offset = 0;
+    for (let i = 0; i < float32Array.length; i++, offset += 2){
+      const s = Math.max(-1, Math.min(1, float32Array[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    return buffer;
+  }
+
+  function rHandleSocketMessage(msg){
+    if (!msg || msg.type !== 'Turn') return;
+    const label = msg.speaker_label || 'A';
+    const text = msg.transcript || '';
+
+    if (!msg.end_of_turn){
+      if (text){
+        const known = rSpeakerMap[label];
+        const displayName = known ? known.name : ('Locuteur ' + label);
+        const color = known ? known.color : 'var(--ink-soft)';
+        if (rEmptyState && rEmptyState.parentNode) rEmptyState.remove();
+        if (!rInterimBubble){ rInterimBubble = document.createElement('div'); rInterimBubble.className = 'bubble interim'; rInterimBubble.style.alignSelf = 'flex-start'; rTranscript.appendChild(rInterimBubble); }
+        rInterimBubble.innerHTML = '<span class="meta" style="color:' + color + '">' + escapeHtml(displayName) + ' · en cours…</span>' + escapeHtml(text);
         rTranscript.scrollTop = rTranscript.scrollHeight;
       }
-    };
-    rRecognition.onerror = (e) => {
-      if (e.error === 'not-allowed'){ rHint.textContent = "Accès micro refusé."; rListening = false; rMicBtn.classList.remove('listening'); rStopPulse(); return; }
-      if (e.error !== 'no-speech') rHint.textContent = "Petit souci d'écoute — réessayez.";
-    };
-    rRecognition.onend = () => { if (rListening){ try{ rRecognition.start(); }catch(e){} } };
-    rRecognition.start();
-    rListening = true; rMicBtn.classList.add('listening'); rHint.textContent = "Écoute en cours…";
+      return;
+    }
+
+    const finalText = (msg.utterance || msg.transcript || '').trim();
+    if (!finalText) return;
+    if (rInterimBubble){ rInterimBubble.remove(); rInterimBubble = null; }
+
+    if (!rSpeakerMap[label]){
+      rShowAssignPrompt(label, finalText);
+      return;
+    }
+    rCommitSegment(rSpeakerMap[label], finalText);
   }
+
+  function rCommitSegment(participant, text){
+    rSegments.push({ participant: participant.name, text });
+    window.audyoSession.reunion = rSegments;
+    rTranscript.appendChild(rAddBubble(participant, text, false));
+    rSummaryBtn.disabled = rSegments.length === 0;
+    rTranscript.scrollTop = rTranscript.scrollHeight;
+  }
+
+  // Affiche la carte d'attribution la première fois qu'une voix inconnue
+  // ("Locuteur A", "B"…) est détectée — l'attribution ne se refait plus
+  // ensuite pour cette même voix, tant que l'écoute n'est pas redémarrée.
+  function rShowAssignPrompt(label, pendingText){
+    rPendingLabel = { label, text: pendingText };
+    document.getElementById('rSapLabel').textContent = 'Locuteur ' + label;
+    const optsEl = document.getElementById('rSapOptions');
+    optsEl.innerHTML = '';
+    participants.forEach(p => {
+      const btn = document.createElement('button');
+      btn.textContent = p.name;
+      btn.style.borderColor = p.color;
+      btn.addEventListener('click', () => rAssignSpeaker(label, p));
+      optsEl.appendChild(btn);
+    });
+    document.getElementById('rSpeakerAssignPrompt').style.display = 'block';
+  }
+  function rAssignSpeaker(label, participant){
+    rSpeakerMap[label] = participant;
+    document.getElementById('rSpeakerAssignPrompt').style.display = 'none';
+    if (rPendingLabel && rPendingLabel.label === label && rPendingLabel.text){
+      rCommitSegment(participant, rPendingLabel.text);
+    }
+    rPendingLabel = null;
+  }
+
   function rStopListening(){
     rListening = false;
-    if (rRecognition){ rRecognition.onend = null; rRecognition.stop(); }
+    if (rAudioProcessor){ try{ rAudioProcessor.disconnect(); rAudioProcessor.onaudioprocess = null; }catch(e){} rAudioProcessor = null; }
+    if (rAudioSourceNode){ try{ rAudioSourceNode.disconnect(); }catch(e){} rAudioSourceNode = null; }
+    if (rAudioCtx){ try{ rAudioCtx.close(); }catch(e){} rAudioCtx = null; }
+    if (rSocket){
+      try{ rSocket.send(JSON.stringify({ type: 'Terminate' })); }catch(e){}
+      try{ rSocket.close(); }catch(e){}
+      rSocket = null;
+    }
+    if (rMicStream){ rMicStream.getTracks().forEach(t => t.stop()); rMicStream = null; }
     rStopPulse();
     if (rInterimBubble){ rInterimBubble.remove(); rInterimBubble = null; }
+    document.getElementById('rSpeakerAssignPrompt').style.display = 'none';
     rMicBtn.classList.remove('listening');
-    rHint.textContent = "Touchez le nom de la personne qui parle, puis le micro.";
+    rHint.textContent = "Appuyez sur le micro — l'app distingue les voix toute seule.";
   }
   rMicBtn.addEventListener('click', () => rListening ? rStopListening() : rStartListening());
 
