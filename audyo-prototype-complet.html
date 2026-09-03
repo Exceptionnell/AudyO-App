@@ -287,6 +287,7 @@ html, body{ margin:0; padding:0; }
 .detect-status{ font-size:11.5px; color:var(--ink-soft); text-align:center; }
 .detect-status.hit{ color:var(--coral); font-weight:700; }
 .detect-note{ font-size:10px; color:var(--ink-soft); opacity:.75; text-align:center; line-height:1.5; padding:0 6px; }
+.detect-warning{ font-size:10.5px; color:var(--danger); font-weight:700; text-align:center; line-height:1.5; padding:6px 12px 0; }
 .alert-toast{ position:absolute; top:80px; left:16px; right:16px; background:var(--grad); color:var(--grad-ink); border-radius:14px; padding:12px 14px; font-size:13px; font-weight:800; text-align:center; z-index:20; box-shadow:0 12px 30px -10px rgba(0,0,0,.5); animation:toastIn .2s ease; }
 @keyframes toastIn{ from{ opacity:0; transform:translateY(-8px);} to{ opacity:1; transform:translateY(0);} }
 .alert-list{ flex:1; overflow-y:auto; padding:8px 16px 16px; }
@@ -812,6 +813,7 @@ html, body{ margin:0; padding:0; }
           <button id="detectToggleBtn" class="btn-primary" style="flex:none;">🔎 Démarrer la détection de sons</button>
           <div class="detect-status" id="detectStatus">Détection à l'arrêt.</div>
           <div class="detect-note">Expérimental — reconnaissance générale de sons via un modèle d'IA (YAMNet, Google), tourne entièrement sur votre téléphone. Peut se tromper ou manquer des sons ; à affiner.</div>
+          <div class="detect-warning">⚠️ Ne fonctionne que tant que cet écran reste ouvert et le téléphone déverrouillé — verrouiller l'écran ou changer d'application coupe l'écoute (limite du système, pas réglable).</div>
         </div>
 
         <div class="name-alert-panel">
@@ -823,6 +825,7 @@ html, body{ margin:0; padding:0; }
           <button id="nameListenToggleBtn" class="btn-primary" style="margin:8px 16px 4px; flex:none;" disabled>🎙 Écouter mon prénom</button>
           <div class="detect-status" id="nameListenStatus">Enregistrez votre prénom pour activer l'écoute.</div>
           <div class="detect-note">Détecte votre prénom prononcé à voix haute par reconnaissance vocale — fonctionne séparément de la détection de sons ci-dessus (un seul micro actif à la fois, l'un coupe l'autre).</div>
+          <div class="detect-warning">⚠️ Ne fonctionne que tant que cet écran reste ouvert et le téléphone déverrouillé — verrouiller l'écran ou changer d'application coupe l'écoute (limite du système, pas réglable).</div>
         </div>
 
         <div class="vibration-pattern-panel">
@@ -2525,6 +2528,41 @@ html, body{ margin:0; padding:0; }
   });
 })();
 
+// ==================== ALERTES — MAINTIEN DE L'ÉCRAN ALLUMÉ (WAKE LOCK) ====================
+// Empêche l'écran de s'éteindre tout seul pendant qu'une détection tourne —
+// sans ça, l'extinction automatique de l'écran coupe le micro au bout de
+// quelques dizaines de secondes, rendant l'alerte inutile sans qu'on s'en
+// rende compte. Ne fonctionne que tant que l'app reste au premier plan :
+// changer d'application ou verrouiller manuellement l'arrête quand même
+// (limite du système, pas de ce mécanisme — voir dossier §3.6).
+(function(){
+  let sentinel = null;
+
+  async function acquire(){
+    if (!('wakeLock' in navigator)) return;
+    try{
+      sentinel = await navigator.wakeLock.request('screen');
+      sentinel.addEventListener('release', () => { sentinel = null; });
+    }catch(e){
+      // Refusé par le navigateur (ex. onglet déjà en arrière-plan) — sans conséquence grave.
+    }
+  }
+  async function release(){
+    if (sentinel){ try{ await sentinel.release(); }catch(e){} sentinel = null; }
+  }
+  // Si le système a coupé le verrou (page masquée un instant), on le
+  // redemande automatiquement au retour, tant qu'une détection est censée tourner.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && window.audyoAnyDetectionActive && window.audyoAnyDetectionActive()) acquire();
+  });
+
+  window.audyoAcquireWakeLock = acquire;
+  window.audyoReleaseWakeLock = release;
+  window.audyoAnyDetectionActive = function(){
+    return !!(window.audyoNameListeningActive || window.audyoSoundDetectionActive);
+  };
+})();
+
 // ==================== ALERTES — MOTIF DE VIBRATION ====================
 (function(){
   const STORAGE_KEY = 'audyo-vibration-pattern';
@@ -2677,12 +2715,16 @@ html, body{ margin:0; padding:0; }
     recognition.onend = () => { if (listening){ try{ recognition.start(); }catch(e){} } };
     recognition.start();
     listening = true;
+    window.audyoNameListeningActive = true;
+    if (window.audyoAcquireWakeLock) window.audyoAcquireWakeLock();
     listenBtn.textContent = "⏹ Arrêter l'écoute";
     listenStatus.textContent = 'Écoute active — dites "' + savedName + '" pour tester.';
   }
 
   function stopListening(){
     listening = false;
+    window.audyoNameListeningActive = false;
+    if (window.audyoReleaseWakeLock) window.audyoReleaseWakeLock();
     if (recognition){ recognition.onend = null; recognition.stop(); }
     listenBtn.textContent = '🎙 Écouter mon prénom';
     listenStatus.textContent = savedName ? ('Prénom enregistré : ' + savedName + '. Prêt à écouter.') : "Enregistrez votre prénom pour activer l'écoute.";
@@ -2859,6 +2901,8 @@ html, body{ margin:0; padding:0; }
     muteGain.connect(audioCtx.destination);
 
     detecting = true;
+    window.audyoSoundDetectionActive = true;
+    if (window.audyoAcquireWakeLock) window.audyoAcquireWakeLock();
     toggleBtn.textContent = '⏹ Arrêter la détection';
     toggleBtn.disabled = false;
     statusEl.textContent = 'Écoute en cours…';
@@ -2867,6 +2911,8 @@ html, body{ margin:0; padding:0; }
 
   function stopDetection(){
     detecting = false;
+    window.audyoSoundDetectionActive = false;
+    if (window.audyoReleaseWakeLock) window.audyoReleaseWakeLock();
     if (classifyTimer) clearInterval(classifyTimer);
     if (processor){ processor.disconnect(); processor.onaudioprocess = null; }
     if (sourceNode) sourceNode.disconnect();
